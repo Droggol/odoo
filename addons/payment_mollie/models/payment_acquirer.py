@@ -122,7 +122,7 @@ class PaymentAcquirerMollie(models.Model):
                 methods_data = self._api_mollie_get_active_payment_methods(extra_params={'locale': lang.code})
                 for method_id in method_to_translate:
                     mollie_method = mollie_methods.filtered(lambda m: m.id == method_id)
-                    translated_value = methods_data.get(mollie_method.method_id_code, {}).get('description')
+                    translated_value = methods_data.get(mollie_method.method_code, {}).get('description')
                     if translated_value:
                         IrTranslation.create({
                             'type': 'model',
@@ -135,32 +135,24 @@ class PaymentAcquirerMollie(models.Model):
                         })
 
     def mollie_get_active_methods(self, order=None):
-        # TODO: [PGA] Check currency is supported. Hard coded filter can be applied based on https://docs.mollie.com/payments/multicurrency
         methods = self.mollie_methods_ids.filtered(lambda m: m.active and m.active_on_shop)
 
         if not self.sudo().mollie_profile_id:
-            methods = methods.filtered(lambda m: m.method_id_code != 'creditcard')
+            methods = methods.filtered(lambda m: m.method_code != 'creditcard')
 
-        # Hide methods if order amount is higher then method limits
-        remove_voucher_method, extra_params = True, {}
+        extra_params = {}
         if order and order._name == 'sale.order':
-            methods = methods.filtered(lambda m: order.amount_total >= m.min_amount and (order.amount_total <= m.max_amount or not m.max_amount))
-            remove_voucher_method = not any(map(lambda p: p._get_mollie_voucher_category(), order.mapped('order_line.product_id.product_tmpl_id')))
             extra_params['amount'] = {'value': "%.2f" % order.amount_total, 'currency': order.currency_id.name}
             if order.partner_invoice_id.country_id:
                 extra_params['billingCountry'] = order.partner_invoice_id.country_id.code
         if order and order._name == 'account.move':
-            methods = methods.filtered(lambda m: order.amount_residual >= m.min_amount and (order.amount_residual <= m.max_amount or not m.max_amount))
-            remove_voucher_method = not any(map(lambda p: p._get_mollie_voucher_category(), order.mapped('invoice_line_ids.product_id.product_tmpl_id')))
             extra_params['amount'] = {'value': "%.2f" % order.amount_residual, 'currency': order.currency_id.name}
             if order.partner_id.country_id:
                 extra_params['billingCountry'] = order.partner_id.country_id.code
-        if remove_voucher_method:
-            methods = methods.filtered(lambda m: m.method_id_code != 'voucher')
 
         # Hide only order type methods from transection links
         if request and request.httprequest.path == '/website_payment/pay':
-            methods = methods.filtered(lambda m: m.supports_payment_api == True)
+            methods = methods.filtered(lambda m: m.supports_payment_api)
 
         # Hide based on country
         if request:
@@ -170,7 +162,7 @@ class PaymentAcquirerMollie(models.Model):
 
         # Hide methods if mollie does not supports them
         suppported_methods = self.sudo()._api_mollie_get_active_payment_methods(extra_params=extra_params)   # sudo as public user do not have access
-        methods = methods.filtered(lambda m: m.method_id_code in suppported_methods.keys())
+        methods = methods.filtered(lambda m: m.method_code in suppported_methods.keys())
 
         return methods
 
@@ -349,13 +341,14 @@ class PaymentAcquirerMollie(models.Model):
     # API methods that uses to mollie python lib
     # -----------------------------------------------
 
-    def _mollie_make_request(self, endpoint, payload=None, method='POST'):
+    def _mollie_make_request(self, endpoint, params=None, data=None, method='POST'):
         """ Make a request at mollie endpoint
 
         Note: self.ensure_one()
 
         :param str endpoint: The endpoint to be reached by the request
-        :param dict payload: The payload of the request
+        :param dict params: The querystring of the request
+        :param dict data: The pyload of the request
         :param str method: The HTTP method of the request
         :return The JSON-formatted content of the response
         :rtype: dict
@@ -365,6 +358,7 @@ class PaymentAcquirerMollie(models.Model):
         endpoint = f'/v2/{endpoint.strip("/")}'
         url = urls.url_join('https://api.mollie.com/', endpoint)
         mollie_api_key = self.mollie_api_key_prod if self.state == 'enabled' else self.mollie_api_key_test
+        params = self._mollie_generate_querystring(params)
 
         # User agent strings used by mollie to find issues in integration
         odoo_version = service.common.exp_version()['server_version']
@@ -377,7 +371,7 @@ class PaymentAcquirerMollie(models.Model):
             "User-Agent": f'Odoo/{odoo_version} MollieOdoo/{mollie_version}',
         }
         try:
-            response = requests.request(method, url, params=payload, headers=headers, timeout=(10, 20))
+            response = requests.request(method, url, params=params, data=data, headers=headers, timeout=(10, 20))
             response.raise_for_status()
         except requests.exceptions.ConnectionError:
             _logger.exception("Unable to communicate with Mollie: %s", url)
@@ -393,18 +387,18 @@ class PaymentAcquirerMollie(models.Model):
         :rtype: dict
         """
         result = {}
-        payload = {'include': 'issuers', 'includeWallets': 'applepay', **extra_params}
+        params = {'include': 'issuers', 'includeWallets': 'applepay', **extra_params}
 
         # get payment api methods
-        payemnt_api_methods = self._mollie_make_request('/methods', payload=payload, method="GET")
+        payemnt_api_methods = self._mollie_make_request('/methods', params=params, method="GET")
         if payemnt_api_methods.get('count'):
             for method in payemnt_api_methods['_embedded']['methods']:
                 method['support_payment_api'] = True
                 result[method['id']] = method
 
         # get order api methods
-        payload['resource'] = 'orders'
-        order_api_methods = self._mollie_make_request('/methods', payload=payload, method="GET")
+        params['resource'] = 'orders'
+        order_api_methods = self._mollie_make_request('/methods', params=params, method="GET")
         if order_api_methods.get('count'):
             for method in order_api_methods['_embedded']['methods']:
                 if method['id'] in result:
@@ -635,7 +629,7 @@ class PaymentAcquirerMollie(models.Model):
         return "%s?tx=%s" % (redirect_url, tx_id)
 
     def _mollie_get_method_record(self, method_code):
-        return self.env['mollie.payment.method'].search([('method_id_code', '=', method_code)], limit=1)
+        return self.env['mollie.payment.method'].search([('method_code', '=', method_code)], limit=1)
 
     def _mollie_fetch_image_by_url(self, image_url):
         image_base64 = False
@@ -644,3 +638,25 @@ class PaymentAcquirerMollie(models.Model):
         except Exception:
             _logger.warning('Can not import mollie image %s' % image_url)
         return image_base64
+
+    def _mollie_generate_querystring(self, params):
+        """ Mollie uses dictionaries in querystrings with square brackets like this
+            https://api.mollie.com/v2/methods?amount[value]=300.00&amount[currency]=EUR
+
+            :param dict params: parameters which needs to be converted in mollie format
+            :return: querystring in mollie's format
+            :rtype: string
+        """
+        if not params:
+            return None
+        parts = []
+        for param, value in sorted(params.items()):
+            if not isinstance(value, dict):
+                parts.append(urls.url_encode({param: value}))
+            else:
+                # encode dictionary with square brackets
+                for key, sub_value in sorted(value.items()):
+                    composed = f"{param}[{key}]"
+                    parts.append(urls.url_encode({composed: sub_value}))
+        if parts:
+            return "&".join(parts)

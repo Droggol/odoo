@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+<template id="mollie_payment_checkout" name="Mollie Payment Checkout" inherit_id="payment.checkout">
+    <xpath expr="//div[hasclass('o_payment_option_card')][1]" position="attributes">
+        <attribute name="t-if">acquirer.provider != 'mollie'</attribute>
+    </xpath>
+    <xpath expr="//t/div[hasclass('o_payment_option_card')][1]" position="after">
+        <t t-if="acquirer.provider == 'mollie'">
+            <t t-call="payment_mollie.mollie_payment_acquirer_select"/>
+        </t>
+    </xpath>
+</template>
+
+<template id="mollie_payment_acquirer_select">
+    <t t-foreach="acquirer.mollie_get_active_methods(website_sale_order or invoice)" t-as="payment_method">
+        <div name="o_payment_option_card" class="card-body o_payment_option_card">
+            <label>
+                <!-- === Radio button === -->
+                <!-- Only shown if linked to the only payment option -->
+                <input name="o_payment_radio" type="radio" t-att-checked="acquirer.id == default_payment_option_id" t-att-class="'' if acquirer_count + token_count > 1 else 'd-none'" t-att-data-payment-option-id="acquirer.id" t-att-data-provider="acquirer.provider" data-payment-option-type="acquirer"/>
+                <!-- === Acquirer name === -->
+                <span class="payment_option_name">
+                    <b t-esc="payment_method.name"/>
+                </span>
+                <!-- === "Test Mode" badge === -->
+                <span t-if="acquirer.state == 'test'" class="badge-pill badge-warning ml-1">
+                                    Test Mode
+                </span>
+            </label>
+            <!-- === Payment icon list === -->
+            <t t-call="payment.icon_list">
+                <t t-set="acquirer" t-value="payment_method"/>
+            </t>
+            <!-- === Help message === -->
+            <div t-if="acquirer.pre_msg" t-out="acquirer.pre_msg" class="text-muted ml-3"/>
+        </div>
+        <!-- === Acquirer inline form === -->
+        <div t-attf-id="o_payment_acquirer_inline_form_{{acquirer.id}}" name="o_payment_inline_form" class="card-footer d-none">
+            <!-- === Inline creadit card  === -->
+            <div class="clearfix" t-if="payment_method.method_code == 'creditcard'">
+                <t t-call="payment_mollie.mollie_creditcard_component"></t>
+            </div>
+        </div>
+    </t>
+</template>
+
+<template id="mollie_creditcard_component">
+    <div>
+        <div id="o_mollie_component" t-att-data-profile_id="acquirer.sudo().mollie_profile_id" t-att-data-mode="acquirer.sudo().state">
+            <div class="form-row o_mollie_form mb-1">
+                <div class="col-md-12">
+                    <label class="label text-muted mb-1" for="mollie-card-holder">Card Holder</label>
+                    <div id="mollie-card-holder" class="mollie_input p-2"></div>
+                    <div id="mollie-card-holder-error" class="text-danger small"></div>
+                </div>
+                <div class="col-md-12">
+                    <label class="label text-muted mb-1 mt-3" for="mollie-card-number">Card Number</label>
+                    <div id="mollie-card-number" class="mollie_input p-2"></div>
+                    <div id="mollie-card-number-error" class="text-danger small"></div>
+                </div>
+                <div class="col-md-6">
+                    <label class="label text-muted mb-1 mt-3" for="mollie-expiry-date">Expiry Date</label>
+                    <div id="mollie-expiry-date" class="mollie_input p-2"></div>
+                    <div id="mollie-expiry-date-error" class="text-danger small"></div>
+                </div>
+                <div class="col-md-6">
+                    <label class="label text-muted mb-1 mt-3" for="mollie-verification-code">Verification code</label>
+                    <div id="mollie-verification-code" class="mollie_input p-2"></div>
+                    <div id="mollie-verification-code-error" class="text-danger small"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+</odoo>

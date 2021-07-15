@@ -13,8 +13,9 @@
     'depends': ['payment'],
     'data': [
         'views/payment_views.xml',
+        'views/template.xml',
         'data/payment_acquirer_data.xml',
-        'security/ir.model.access.csv'
+        'security/ir.model.access.csv',
     ],
     'application': True,
 }
