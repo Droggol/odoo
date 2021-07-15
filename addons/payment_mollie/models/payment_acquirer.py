@@ -26,6 +26,12 @@ class PaymentAcquirerMollie(models.Model):
     mollie_profile_id = fields.Char("Mollie Profile ID", groups="base.group_user")
     mollie_methods_ids = fields.One2many('mollie.payment.method', 'parent_id', string='Mollie Payment Methods')
 
+    def _get_default_payment_method(self):
+        self.ensure_one()
+        if self.provider != 'mollie':
+            return super()._get_default_payment_method()
+        return self.env.ref('payment_mollie.payment_method_mollie').id
+
     def action_mollie_sync_methods(self):
         methods = self._api_mollie_get_active_payment_methods()
         if methods:
@@ -356,51 +362,57 @@ class PaymentAcquirerMollie(models.Model):
         :raise: ValidationError if an HTTP error occurs
         """
         self.ensure_one()
+        endpoint = f'/v2/{endpoint.strip("/")}'
+        url = urls.url_join('https://api.mollie.com/', endpoint)
+        mollie_api_key = self.mollie_api_key_prod if self.state == 'enabled' else self.mollie_api_key_test
 
-        # url = urls.url_join('https://api.mollie.com/v2/', endpoint)
-        # mollie_api_key = self.mollie_api_key_prod if self.state == 'enabled' else self.mollie_api_key_test
-        # mollie_user_agent = {
-        #     Odoo
-        # }
-        # mollie_client.set_user_agent_component('Odoo', service.common.exp_version()['server_version'])
-        # mollie_client.set_user_agent_component('MollieOdoo', self.env.ref('base.module_payment_mollie').installed_version)
-
-        headers={
-            "Accept": "application/json",
-            "Authorization": "Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "User-Agent": self.user_agent,
-        },
+        # User agent strings used by mollie to find issues in integration
+        odoo_version = service.common.exp_version()['server_version']
+        mollie_version = self.env.ref('base.module_payment_mollie').installed_version
 
         headers = {
-            'AUTHORIZATION': f'Bearer {self.stripe_secret_key}',
-            'Stripe-Version': '2019-05-16',  # SetupIntent needs a specific version
+            "Accept": "application/json",
+            "Authorization": f'Bearer {mollie_api_key}',
+            "Content-Type": "application/json",
+            "User-Agent": f'Odoo/{odoo_version} MollieOdoo/{mollie_version}',
         }
         try:
-            response = requests.request(method, url, data=payload, headers=headers, timeout=60)
-            # Stripe can send 4XX errors for payment failures (not only for badly-formed requests).
-            # Check if an error code is present in the response content and raise only if not.
-            # See https://stripe.com/docs/error-codes.
-            # If the request originates from an offline operation, don't raise and return the resp.
-            if not response.ok \
-                    and not offline \
-                    and 400 <= response.status_code < 500 \
-                    and response.json().get('error'):  # The 'code' entry is sometimes missing
-                try:
-                    response.raise_for_status()
-                except requests.exceptions.HTTPError:
-                    _logger.exception("invalid API request at %s with data %s", url, payload)
-                    error_msg = response.json().get('error', {}).get('message', '')
-                    raise ValidationError(
-                        "Stripe: " + _(
-                            "The communication with the API failed.\n"
-                            "Stripe gave us the following info about the problem:\n'%s'", error_msg
-                        )
-                    )
+            response = requests.request(method, url, params=payload, headers=headers, timeout=(10, 20))
+            response.raise_for_status()
         except requests.exceptions.ConnectionError:
-            _logger.exception("unable to reach endpoint at %s", url)
-            raise ValidationError("Stripe: " + _("Could not establish the connection to the API."))
+            _logger.exception("Unable to communicate with Mollie: %s", url)
+            raise ValidationError("Mollie: " + _("Could not establish the connection to the API."))
         return response.json()
+
+    def _api_mollie_get_active_payment_methods(self, extra_params={}):
+        """ Get method data from the mollie. It will return the methods
+        that are enabled in the Mollie.
+
+        :param dict extra_params: Optional parameters which are passed to mollie during API call
+        :return: details of enabled methods
+        :rtype: dict
+        """
+        result = {}
+        payload = {'include': 'issuers', 'includeWallets': 'applepay', **extra_params}
+
+        # get payment api methods
+        payemnt_api_methods = self._mollie_make_request('/methods', payload=payload, method="GET")
+        if payemnt_api_methods.get('count'):
+            for method in payemnt_api_methods['_embedded']['methods']:
+                method['support_payment_api'] = True
+                result[method['id']] = method
+
+        # get order api methods
+        payload['resource'] = 'orders'
+        order_api_methods = self._mollie_make_request('/methods', payload=payload, method="GET")
+        if order_api_methods.get('count'):
+            for method in order_api_methods['_embedded']['methods']:
+                if method['id'] in result:
+                    result[method['id']]['support_order_api'] = True
+                else:
+                    method['support_order_api'] = True
+                    result[method['id']] = method
+        return result
 
     def _api_mollie_get_client(self):
         """ Creates the mollie client object based. It will be used to make
@@ -442,36 +454,6 @@ class PaymentAcquirerMollie(models.Model):
     def _api_mollie_get_order(self, tx_id):
         mollie_client = self._api_mollie_get_client()
         return mollie_client.orders.get(tx_id, embed="payments")
-
-    def _api_mollie_get_active_payment_methods(self, extra_params={}):
-        """ Get method data from the mollie. It will return the methods
-        that are enabled in the Mollie.
-
-        :param dict extra_params: Optional parameters which are passed to mollie during API call
-        :return: details of enabled methods
-        :rtype: dict
-        """
-        result = {}
-        mollie_client = self._api_mollie_get_client()
-        params = {'include': 'issuers', 'includeWallets': 'applepay', **extra_params}
-
-        # get order api methods
-        order_api_methods = mollie_client.methods.list(resource="orders", **params)
-        if order_api_methods.get('count'):
-            for method in order_api_methods['_embedded']['methods']:
-                method['support_order_api'] = True
-                result[method['id']] = method
-
-        # get payment api methods
-        payment_api_methods = mollie_client.methods.list(**params)
-        if payment_api_methods.get('count'):
-            for method in payment_api_methods['_embedded']['methods']:
-                if method['id'] in result:
-                    result[method['id']]['support_payment_api'] = True
-                else:
-                    method['support_payment_api'] = True
-                    result[method['id']] = method
-        return result
 
     def _api_mollie_refund(self, amount, currency, payment_record):
         mollie_client = self._api_mollie_get_client()

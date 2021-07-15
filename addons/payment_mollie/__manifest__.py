@@ -11,11 +11,6 @@
     'website': 'http://www.mollie.com',
 
     'depends': ['payment'],
-    'external_dependencies': {
-        'python': [
-            'mollie-api-python',
-        ]
-    },
     'data': [
         'views/payment_views.xml',
         'data/payment_acquirer_data.xml',
