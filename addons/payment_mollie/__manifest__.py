@@ -18,4 +18,10 @@
         'security/ir.model.access.csv',
     ],
     'application': True,
+    'assets': {
+        'web.assets_frontend': [
+            'payment_mollie/static/src/js/payment_form.js',
+            'payment_mollie/static/src/scss/payment_form.scss',
+        ]
+    }
 }
