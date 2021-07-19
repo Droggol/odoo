@@ -17,7 +17,7 @@
 <template id="mollie_payment_methods_select">
     <t t-set="mollie_payment_methods" t-value="acquirer.mollie_get_active_methods(website_sale_order or invoice)"/>
     <t t-foreach="mollie_payment_methods" t-as="payment_method">
-        <div name="o_payment_option_card" class="card-body o_payment_option_card">
+        <div name="o_payment_option_card" t-attf-class="card-body o_payment_option_card #{'d-none' if payment_method.method_code == 'applepay' else ''}">
             <label>
                 <!-- === Radio button === -->
                 <input name="o_payment_radio" type="radio" t-att-checked="acquirer.id == default_payment_option_id and payment_method_index == 0" t-att-class="'' if acquirer_count - 1 + len(mollie_payment_methods) + token_count > 1 else 'd-none'" t-att-data-payment-option-id="payment_method.id" t-att-data-provider="acquirer.provider" data-payment-option-type="sub_acquirer" t-att-data-mollie-method="payment_method.method_code"/>

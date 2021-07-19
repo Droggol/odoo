@@ -13,29 +13,11 @@ odoo.define('mollie.payment.form', function (require) {
         /**
          * @override
          */
-        init: function () {
-            this.mollie_loaded = false;
-            this.mollieJSURL = "https://js.mollie.com/v1/mollie.js";
-            return this._super.apply(this, arguments);
-        },
-
-        /**
-         * @override
-         */
-        willStart: function () {
-            var self = this;
-            self.libPromise = ajax.loadJS(self.mollieJSURL);
-            return this._super.apply(this, arguments).then(function () {
-                return self.libPromise;
-            });
-        },
-
-        /**
-         * @override
-         */
         start: function () {
+            this.mollieComponentLoaded = false;
+            // Show apple pay option only for apple devices
             if (window.ApplePaySession && window.ApplePaySession.canMakePayments()) {
-                this.$('input[data-methodname="applepay"]').closest('.o_payment_acquirer_select').removeClass('d-none');
+                this.$('input[data-mollie-method="applepay"]').closest('.o_payment_option_card').removeClass('d-none');
             }
             return this._super.apply(this, arguments);
         },
@@ -54,10 +36,53 @@ odoo.define('mollie.payment.form', function (require) {
             if (provider !== 'mollie') {
                 return this._super(...arguments);
             }
-
+            var $creditCardContainer = this.$(`#o_payment_sub_acquirer_inline_form_${paymentOptionId} #o_mollie_component`);
+            if (!$creditCardContainer.length || this.mollieComponentLoaded) {
+                return this._super(...arguments);
+            }
             this._setPaymentFlow('direct');
-            
-            console.log(provider, paymentOptionId, flow);
+            return ajax.loadJS("https://js.mollie.com/v1/mollie.js").then(() => this._setupMollieComponent());
+        },
+
+        /**
+         * @private
+         */
+        _setupMollieComponent: function () {
+
+            var mollieProfileId = this.$('#o_mollie_component').data('profile_id');
+            var mollieTestMode = this.$('#o_mollie_component').data('mode') === 'test';
+
+            var context;
+            this.trigger_up('context_get', {
+                callback: function (ctx) {
+                    context = ctx;
+                },
+            });
+            var lang = context.lang || 'en_US';
+            var mollieComponent = Mollie(mollieProfileId, {locale: lang, testmode: mollieTestMode});
+            this._createMollieComponent(mollieComponent, 'cardHolder', '#mollie-card-holder');
+            this._createMollieComponent(mollieComponent, 'cardNumber', '#mollie-card-number');
+            this._createMollieComponent(mollieComponent, 'expiryDate', '#mollie-expiry-date');
+            this._createMollieComponent(mollieComponent, 'verificationCode', '#mollie-verification-code');
+            this.mollieComponentLoaded = true;
+        },
+
+        /**
+        * @private
+        */
+        _createMollieComponent: function (mollieComponent, type, componentId) {
+            var component = mollieComponent.createComponent(type);
+            component.mount(componentId);
+
+            var $componentError = this.$(`${componentId}-error`);
+            component.addEventListener('change', function (ev) {
+                if (ev.error && ev.touched) {
+                    $componentError.text(ev.error);
+                } else {
+                    $componentError.text('');
+                }
+            });
+
         }
 
     });
