@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import json
 import base64
 import logging
 import requests
@@ -380,6 +381,8 @@ class PaymentAcquirerMollie(models.Model):
             "Content-Type": "application/json",
             "User-Agent": f'Odoo/{odoo_version} MollieOdoo/{mollie_version}',
         }
+        if data:
+            data = json.dumps(data)
         try:
             response = requests.request(method, url, params=params, data=data, headers=headers, timeout=(10, 20))
             response.raise_for_status()
@@ -630,7 +633,7 @@ class PaymentAcquirerMollie(models.Model):
 
     def _mollie_redirect_url(self, tx_id):
         base_url = self.get_base_url()
-        redirect_url = urls.url_join(base_url, MollieController._redirect_url)
+        redirect_url = urls.url_join(base_url, '/shop')
         return "%s?tx=%s" % (redirect_url, tx_id)
 
     def _mollie_webhook_url(self, tx_id):
