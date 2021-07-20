@@ -36,7 +36,7 @@ odoo.define('mollie.payment.form', function (require) {
             if (provider !== 'mollie') {
                 return this._super(...arguments);
             }
-            var $creditCardContainer = this.$(`#o_payment_sub_acquirer_inline_form_${paymentOptionId} #o_mollie_component`);
+            var $creditCardContainer = this.$(`#o_payment_mollie_inline_form_${paymentOptionId} #o_mollie_component`);
             if (!$creditCardContainer.length || this.mollieComponentLoaded) {
                 return this._super(...arguments);
             }
@@ -82,8 +82,26 @@ odoo.define('mollie.payment.form', function (require) {
                     $componentError.text('');
                 }
             });
+        },
 
-        }
+        _prepareTransactionRouteParams: function (provider, paymentOptionId, flow) {
+            const transactionRouteParams = this._super(...arguments);
+            if (provider !== 'mollie') {
+                return transactionRouteParams;
+            }
+            const $checkedRadios = this.$('input[name="o_payment_radio"]:checked');
+            let mollieData = {
+                mollie_method: $checkedRadios.data('mollie-method'),
+                payment_option_id: $checkedRadios.data('mollie-acquirer-id'),
+            };
+            if ($checkedRadios.data('mollie-issuers')) {
+                mollieData['mollie_issuer'] = this.$(`#o_payment_mollie_inline_form_${paymentOptionId} .o_mollie_issuer.active`).data('mollie-issuer');
+            }
+            return {
+                ...transactionRouteParams,
+                ...mollieData
+            };
+        },
 
     });
 

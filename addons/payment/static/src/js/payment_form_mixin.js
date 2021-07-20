@@ -342,7 +342,6 @@ odoo.define('payment.payment_form_mixin', require => {
          */
         _processPayment: function (provider, paymentOptionId, flow) {
             // Call the transaction route to create a tx and retrieve the processing values
-            debugger;
             return this._rpc({
                 route: this.txContext.transactionRoute,
                 params: this._prepareTransactionRouteParams(provider, paymentOptionId, flow),

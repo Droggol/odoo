@@ -407,3 +407,16 @@ class PaymentAcquirer(models.Model):
         """
         self.ensure_one()
         return self.redirect_form_view_id
+
+    def _get_custom_create_values(self, values):
+        """ Compute acquirer-specific values for `create` method.
+
+        Override this method if you wants transection record to have custom values
+        passed from the web page.
+
+        :param dict values: Extra values submitted from the web page
+        :return: The dict of acquirer-specific create values
+        :rtype: dict
+        """
+        self.ensure_one()
+        return dict()

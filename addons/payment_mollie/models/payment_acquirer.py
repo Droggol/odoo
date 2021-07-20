@@ -26,6 +26,16 @@ class PaymentAcquirerMollie(models.Model):
     mollie_profile_id = fields.Char("Mollie Profile ID", groups="base.group_user")
     mollie_methods_ids = fields.One2many('mollie.payment.method', 'parent_id', string='Mollie Payment Methods')
 
+    def _get_custom_create_values(self, values):
+        res = super()._get_custom_create_values(values)
+        if self.provider != 'mollie':
+            return res
+        return {
+            # 'mollie_card_token': values.get(''),
+            'mollie_payment_method': values.get('mollie_method'),
+            'mollie_payment_issuer': values.get('mollie_issuer')
+        }
+
     def _get_default_payment_method(self):
         self.ensure_one()
         if self.provider != 'mollie':

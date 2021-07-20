@@ -276,9 +276,10 @@ class PaymentPortal(portal.CustomerPortal):
                 _("The payment should either be direct, with redirection, or made by a token.")
             )
 
+        custom_create_values = custom_create_values or {}
+        custom_create_values.update(acquirer_sudo._get_custom_create_values(kwargs))
+
         if invoice_id:
-            if custom_create_values is None:
-                custom_create_values = {}
             custom_create_values['invoice_ids'] = [Command.set([int(invoice_id)])]
 
         reference = request.env['payment.transaction']._compute_reference(
@@ -287,6 +288,7 @@ class PaymentPortal(portal.CustomerPortal):
             **(custom_create_values or {}),
             **kwargs
         )
+
         if validation_route:  # Acquirers determine the amount and currency in validation operations
             amount = acquirer_sudo._get_validation_amount()
             currency_id = acquirer_sudo._get_validation_currency().id
@@ -303,7 +305,7 @@ class PaymentPortal(portal.CustomerPortal):
             'tokenize': tokenize,
             'validation_route': validation_route,
             'landing_route': landing_route,
-            **(custom_create_values or {}),
+            **custom_create_values,
         })  # In sudo mode to allow writing on callback fields
         # Validation routes require the transaction id
         tx_sudo.validation_route = validation_route and f'{validation_route}?tx_id={tx_sudo.id}'
