@@ -21,7 +21,7 @@
             <label>
                 <!-- === Radio button === -->
                 <!-- Here we have added mollie as payment-option-type as it will have multiple payment option from same acquirer -->
-                <input name="o_payment_radio" type="radio" t-att-checked="acquirer.id == default_payment_option_id and payment_method_index == 0" t-att-class="'' if acquirer_count - 1 + len(mollie_payment_methods) + token_count > 1 else 'd-none'" t-att-data-payment-option-id="payment_method.id" t-att-data-provider="acquirer.provider" t-attf-data-payment-option-type="mollie" t-att-data-mollie-method="payment_method.method_code" t-att-data-mollie-issuers="len(payment_method.payment_issuer_ids)" t-att-data-mollie-acquirer-id="acquirer.id"/>
+                <input name="o_payment_radio" type="radio" t-att-checked="acquirer.id == default_payment_option_id and payment_method_index == 0" t-att-class="'' if acquirer_count - 1 + len(mollie_payment_methods) + token_count > 1 else 'd-none'" t-att-data-payment-option-id="payment_method.id" t-att-data-provider="acquirer.provider" t-attf-data-payment-option-type="mollie_method" t-att-data-mollie-method="payment_method.method_code" t-att-data-mollie-issuers="len(payment_method.payment_issuer_ids)" t-att-data-mollie-acquirer-id="acquirer.id"/>
                 <!-- === Acquirer name === -->
                 <span class="payment_option_name">
                     <b t-esc="payment_method.name"/>
@@ -39,7 +39,7 @@
             <div t-if="acquirer.pre_msg" t-out="acquirer.pre_msg" class="text-muted ml-3"/>
         </div>
         <!-- === Acquirer inline form === -->
-        <div t-attf-id="o_payment_mollie_inline_form_{{payment_method.id}}" name="o_payment_inline_form" class="card-footer d-none">
+        <div t-attf-id="o_payment_mollie_method_inline_form_{{payment_method.id}}" name="o_payment_inline_form" class="card-footer d-none">
             <!-- === Inline creadit card  === -->
             <div class="clearfix" t-if="payment_method.method_code == 'creditcard'">
                 <t t-call="payment_mollie.mollie_creditcard_component"></t>

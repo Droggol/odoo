@@ -32,7 +32,7 @@ class PaymentAcquirerMollie(models.Model):
         if self.provider != 'mollie':
             return res
         return {
-            # 'mollie_card_token': values.get(''),
+            'mollie_card_token': values.get('mollie_card_token'),
             'mollie_payment_method': values.get('mollie_method'),
             'mollie_payment_issuer': values.get('mollie_issuer')
         }
@@ -323,30 +323,14 @@ class PaymentAcquirerMollie(models.Model):
             transaction.acquirer_reference = result.get('id')
         return result
 
-    def _mollie_get_payment_data(self, transection_reference, force_payment=False):
+    def _mollie_get_payment_data(self, transection_reference):
         """ Sending force_payment=True will send payment data even if transection_reference is for order api """
         mollie_data = False
         if transection_reference.startswith('ord_'):
-            mollie_data = self._api_mollie_get_order(transection_reference)
+            mollie_data = self._mollie_make_request(f'/orders/{transection_reference}', params={'embed': 'payments'}, method="GET")
         if transection_reference.startswith('tr_'):    # This is not used
-            mollie_data = self._api_mollie_get_payment(transection_reference)
-
-        if not force_payment:
-            return mollie_data
-
-        transection_id = False
-        if mollie_data['resource'] == 'order':
-            payments = mollie_data.get('_embedded', {}).get('payments', [])
-            if payments:
-                # TODO: handle multiple payment for same order
-                transection_id = payments[0]['id']
-        elif mollie_data['resource'] == 'payment':
-            transection_id = mollie_data['id']
-
-        mollie_client = self._api_mollie_get_client()
-
-        # TO-DO: check if mollie_data is same as below line
-        return mollie_client.payments.get(transection_id)
+            mollie_data = self._mollie_make_request(f'/payments/{transection_reference}', method="GET")
+        return mollie_data
 
     # -----------------------------------------------
     # API methods that uses to mollie python lib
@@ -630,11 +614,6 @@ class PaymentAcquirerMollie(models.Model):
             'nb_NO', 'sv_SE', 'fi_FI', 'da_DK',
             'is_IS', 'hu_HU', 'pl_PL', 'lv_LV',
             'lt_LT']
-
-    def _mollie_redirect_url(self, tx_id):
-        base_url = self.get_base_url()
-        redirect_url = urls.url_join(base_url, '/shop')
-        return "%s?tx=%s" % (redirect_url, tx_id)
 
     def _mollie_webhook_url(self, tx_id):
         base_url = self.get_base_url()

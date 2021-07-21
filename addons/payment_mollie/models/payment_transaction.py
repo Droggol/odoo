@@ -7,6 +7,9 @@ import phonenumbers
 from werkzeug import urls
 
 from odoo import _, api, fields, models
+from odoo.exceptions import ValidationError
+from odoo.addons.payment import utils as payment_utils
+from odoo.addons.payment_mollie.controllers.main import MollieController
 
 _logger = logging.getLogger(__name__)
 
@@ -18,16 +21,84 @@ class PaymentTransaction(models.Model):
     mollie_payment_method = fields.Char()
     mollie_payment_issuer = fields.Char()
 
+    @api.model
+    def _compute_reference(self, provider, prefix=None, separator='-', **kwargs):
+        if provider == 'mollie':
+            if not prefix:
+                # If no prefix is provided, it could mean that a module has passed a kwarg intended
+                # for the `_compute_reference_prefix` method, as it is only called if the prefix is
+                # empty. We call it manually here because singularizing the prefix would generate a
+                # default value if it was empty, hence preventing the method from ever being called
+                # and the transaction from received a reference named after the related document.
+                prefix = self.sudo()._compute_reference_prefix(
+                    provider, separator, **kwargs
+                ) or None
+            prefix = payment_utils.singularize_reference_prefix(prefix=prefix, separator=separator)
+        return super()._compute_reference(provider, prefix=prefix, separator=separator, **kwargs)
+
     def _get_specific_processing_values(self, processing_values):
         res = super()._get_specific_processing_values(processing_values)
         if self.provider != 'mollie':
             return res
 
-        checkout_session = self._mollie_create_payment_record(processing_values)
+        payment_data = self._mollie_create_payment_record(processing_values)
+
         return {
-            'publishable_key': self.acquirer_id.stripe_publishable_key,
-            'session_id': checkout_session['id'],
+            'status': payment_data.get('status'),
+            'redirect_url': payment_data["_links"]["checkout"]["href"]
         }
+
+    def _get_tx_from_feedback_data(self, provider, data):
+        """ Override of payment to find the transaction based on Mollie data.
+
+        :param str provider: The provider of the acquirer that handled the transaction
+        :param dict data: The feedback data sent by the provider
+        :return: The transaction if found
+        :rtype: recordset of `payment.transaction`
+        :raise: ValidationError if the data match no transaction
+        """
+        tx = super()._get_tx_from_feedback_data(provider, data)
+        if provider != 'mollie':
+            return tx
+
+        tx = self.search([('reference', '=', data.get('ref')), ('provider', '=', 'mollie')])
+        if not tx:
+            raise ValidationError(
+                "Mollie: " + _("No transaction found matching reference %s.", data.get('ref'))
+            )
+        return tx
+
+    def _process_feedback_data(self, data):
+        """ Override of payment to process the transaction based on Mollie data.
+
+        Note: self.ensure_one()
+
+        :param dict data: The feedback data sent by the provider
+        :return: None
+        """
+        super()._process_feedback_data(data)
+        if self.provider != 'mollie':
+            return
+
+        if self.state == 'done':
+            return
+
+        acquirer_reference = self.acquirer_reference
+        mollie_payment = self.acquirer_id._mollie_get_payment_data(acquirer_reference)
+        payment_status = mollie_payment.get('status')
+        if payment_status == 'paid':
+            self._set_done()
+        elif payment_status == 'pending':
+            self._set_pending()
+        elif payment_status == 'authorized':
+            self._set_authorized()
+        elif payment_status in ['expired', 'canceled', 'failed']:
+            self._set_canceled("Mollie: " + _("Mollie: canceled due to status: %s", payment_status))
+        else:
+            _logger.info("received data with invalid payment status: %s", payment_status)
+            self._set_error(
+                "Mollie: " + _("Received data with invalid payment status: %s", payment_status)
+            )
 
     def _mollie_create_payment_record(self, values):
         self.ensure_one()
@@ -35,6 +106,8 @@ class PaymentTransaction(models.Model):
 
         if method_record and method_record.supports_order_api:
             result = self._mollie_create_order()
+
+        return result
 
     def _mollie_create_order(self):
         order_source = False
@@ -67,7 +140,7 @@ class PaymentTransaction(models.Model):
             },
 
             'locale': self.acquirer_id._mollie_user_locale(),
-            'redirectUrl': self.acquirer_id._mollie_redirect_url(self.id),
+            'redirectUrl': self._mollie_redirect_url(),
         }
 
         # Mollie throws error with local URLs
@@ -227,3 +300,8 @@ class PaymentTransaction(models.Model):
         }
 
         return product_data
+
+    def _mollie_redirect_url(self):
+        base_url = self.get_base_url()
+        redirect_url = urls.url_join(base_url, MollieController._return_url)
+        return "%s?ref=%s" % (redirect_url, self.reference)

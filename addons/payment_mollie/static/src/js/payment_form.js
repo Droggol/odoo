@@ -36,11 +36,11 @@ odoo.define('mollie.payment.form', function (require) {
             if (provider !== 'mollie') {
                 return this._super(...arguments);
             }
+            this._setPaymentFlow('direct');
             var $creditCardContainer = this.$(`#o_payment_mollie_inline_form_${paymentOptionId} #o_mollie_component`);
             if (!$creditCardContainer.length || this.mollieComponentLoaded) {
                 return this._super(...arguments);
             }
-            this._setPaymentFlow('direct');
             return ajax.loadJS("https://js.mollie.com/v1/mollie.js").then(() => this._setupMollieComponent());
         },
 
@@ -95,12 +95,21 @@ odoo.define('mollie.payment.form', function (require) {
                 payment_option_id: $checkedRadios.data('mollie-acquirer-id'),
             };
             if ($checkedRadios.data('mollie-issuers')) {
-                mollieData['mollie_issuer'] = this.$(`#o_payment_mollie_inline_form_${paymentOptionId} .o_mollie_issuer.active`).data('mollie-issuer');
+                mollieData['mollie_issuer'] = this.$(`#o_payment_mollie_method_inline_form_${paymentOptionId} .o_mollie_issuer.active`).data('mollie-issuer');
             }
             return {
                 ...transactionRouteParams,
                 ...mollieData
             };
+        },
+
+        _processDirectPayment: function (provider, acquirerId, processingValues) {
+            if (provider !== 'mollie') {
+                return this._super(...arguments);
+            }
+            if (processingValues.status == 'created') {
+                window.location = processingValues.redirect_url;
+            }
         },
 
     });
