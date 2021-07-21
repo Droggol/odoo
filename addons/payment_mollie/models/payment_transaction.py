@@ -148,7 +148,7 @@ class PaymentTransaction(models.Model):
         # Mollie throws error with local URLs
         webhook_url = urls.url_join(base_url, MollieController._notify_url)
         if "://localhost" not in webhook_url and "://192.168." not in webhook_url:
-            payment_data['webhookUrl'] = webhook_url
+            payment_data['webhookUrl'] = f'{webhook_url}?ref={self.reference}'
 
         # Add if transection has cardToken
         if self.mollie_card_token:
@@ -191,7 +191,7 @@ class PaymentTransaction(models.Model):
         # Mollie throws error with local URLs
         webhook_url = urls.url_join(base_url, MollieController._notify_url)
         if "://localhost" not in webhook_url and "://192.168." not in webhook_url:
-            payment_data['webhookUrl'] = webhook_url
+            payment_data['webhookUrl'] = f'{webhook_url}?ref={self.reference}'
 
         # Add if transection has cardToken
         if self.mollie_card_token:
@@ -287,6 +287,12 @@ class PaymentTransaction(models.Model):
                 'line_id': line.id,
                 'product_id': line.product_id.id
             }
+            if self.mollie_payment_method == 'voucher':
+                category = line.product_id.product_tmpl_id._get_mollie_voucher_category()
+                if category:
+                    line_data.update({
+                        'category': category
+                    })
             lines.append(line_data)
         return lines
 

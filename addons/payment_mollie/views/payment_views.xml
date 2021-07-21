@@ -50,13 +50,20 @@
                                         <group>
                                             <field name="active" invisible="1"/>
                                             <field name="active_on_shop" widget="boolean_toggle"/>
-                                            <field name="journal_id"/>
                                         </group>
                                         <group>
                                             <field name="payment_icon_ids" widget="many2many_tags"/>
                                             <field name="country_ids" widget="many2many_tags"/>
                                         </group>
                                     </group>
+                                </page>
+                                <page string="Voucher Configuration" name="voucher_config" attrs="{'invisible': [('method_code', '!=', 'voucher')]}">
+                                    <field name="mollie_voucher_ids">
+                                        <tree editable="bottom">
+                                            <field name="category_id"/>
+                                            <field name="mollie_voucher_category"/>
+                                        </tree>
+                                    </field>
                                 </page>
                             </notebook>
                         </form>

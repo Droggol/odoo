@@ -174,9 +174,10 @@ class PaymentAcquirerMollie(models.Model):
         if not self.sudo().mollie_profile_id:
             methods = methods.filtered(lambda m: m.method_code != 'creditcard')
 
-        extra_params = {}
+        remove_voucher_method, extra_params = True, {}
         if order:
             extra_params['amount'] = {'value': "%.2f" % order.amount_total, 'currency': order.currency_id.name}
+            remove_voucher_method = not any(map(lambda p: p._get_mollie_voucher_category(), order.mapped('order_line.product_id.product_tmpl_id')))
             if order.partner_invoice_id.country_id:
                 extra_params['billingCountry'] = order.partner_invoice_id.country_id.code
         else:
@@ -190,6 +191,9 @@ class PaymentAcquirerMollie(models.Model):
 
         if amount and currency:
             extra_params['amount'] = {'value': "%.2f" % amount, 'currency': currency.name}
+
+        if remove_voucher_method:
+            methods = methods.filtered(lambda m: m.method_code != 'voucher')
 
         # Hide based on country
         if request:
@@ -313,7 +317,7 @@ class PaymentAcquirerMollie(models.Model):
 
     def _mollie_generate_querystring(self, params):
         """ Mollie uses dictionaries in querystrings with square brackets like this
-            https://api.mollie.com/v2/methods?amount[value]=300.00&amount[currency]=EUR
+            https://api.mollie.com/v2/methods?amount[value]=125.91&amount[currency]=EUR
 
             :param dict params: parameters which needs to be converted in mollie format
             :return: querystring in mollie's format
