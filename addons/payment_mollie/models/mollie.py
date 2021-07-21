@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import logging
 
@@ -19,9 +20,6 @@ class MolliePaymentMethod(models.Model):
     payment_icon_ids = fields.Many2many('payment.icon', string='Supported Payment Icons')
     active = fields.Boolean(default=True)
     active_on_shop = fields.Boolean(string="Enabled on shop", default=True)
-    journal_id = fields.Many2one(
-        'account.journal', 'Payment Journal', domain="[('type', 'in', ['bank', 'cash'])]",
-        help="""Journal where the successful transactions will be posted""")
     country_ids = fields.Many2many('res.country', string='Country Availability')
 
     # Hidden fields that are used for filtering methods

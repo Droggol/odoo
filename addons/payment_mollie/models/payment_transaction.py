@@ -36,7 +36,7 @@ class PaymentTransaction(models.Model):
         if self.provider != 'mollie':
             return res
 
-        payment_data = self._mollie_create_payment_record(processing_values)
+        payment_data = self._mollie_create_transection_record(processing_values)
 
         if payment_data["_links"].get("checkout"):
             redirect_url = payment_data["_links"]["checkout"]["href"]
@@ -100,26 +100,26 @@ class PaymentTransaction(models.Model):
                 "Mollie: " + _("Received data with invalid payment status: %s", payment_status)
             )
 
-    def _mollie_create_payment_record(self, values):
+    def _mollie_create_transection_record(self, values):
         self.ensure_one()
         method_record = self.acquirer_id.mollie_methods_ids.filtered(lambda m: m.method_code == self.mollie_payment_method)
 
-        if method_record and method_record.supports_order_api:
+        result = None
+        if self.sale_order_ids and method_record.supports_order_api:
             result = self._mollie_create_order()
+
+        # Fallback to payment API
+        if (result and result.get('error') or result is None) and method_record.supports_payment_api:
+            if result and result.get('error'):
+                _logger.warning("Can not use order api due to '%s' fallback on payment" % (result.get('error')))
+            result = self._mollie_create_payment()
 
         return result
 
     def _mollie_create_order(self):
-        order_source = False
-        if self.invoice_ids:
-            order_source = self.invoice_ids[0]
-        elif self.sale_order_ids:
-            order_source = self.sale_order_ids[0]
+        order = self.sale_order_ids[0]
 
-        if not order_source:
-            return None
-
-        order_type = 'Sale Order' if order_source._name == 'sale.order' else 'Invoice'
+        order_type = 'Sale Order' if order._name == 'sale.order' else 'Invoice'
         base_url = self.acquirer_id.get_base_url()
         redirect_url = urls.url_join(base_url, MollieController._return_url)
 
@@ -132,13 +132,13 @@ class PaymentTransaction(models.Model):
 
             'billingAddress': self._prepare_mollie_address(),
             "orderNumber": "%s (%s)" % (order_type, self.reference),
-            'lines': self._mollie_get_order_lines(order_source),
+            'lines': self._mollie_get_order_lines(order),
 
             'metadata': {
                 'transaction_id': self.id,
                 'reference': self.reference,
                 'type': order_type,
-                "description": order_source.name
+                "description": order.name
             },
 
             'locale': self.acquirer_id._mollie_user_locale(),
@@ -165,6 +165,50 @@ class PaymentTransaction(models.Model):
         # So we can identify transaction with mollie respose
         if result and result.get('id'):
             self.acquirer_reference = result.get('id')
+        return result
+
+    def _mollie_create_payment(self):
+        base_url = self.acquirer_id.get_base_url()
+        redirect_url = urls.url_join(base_url, MollieController._return_url)
+
+        payment_data = {
+            'method': self.mollie_payment_method,
+            'amount': {
+                'currency': self.currency_id.name,
+                'value': "%.2f" % (self.amount + self.fees)
+            },
+            'description': self.reference,
+
+            'metadata': {
+                'transaction_id': self.id,
+                'reference': self.reference,
+            },
+
+            'locale': self.acquirer_id._mollie_user_locale(),
+            'redirectUrl': f'{redirect_url}?ref={self.reference}'
+        }
+
+        # Mollie throws error with local URLs
+        webhook_url = urls.url_join(base_url, MollieController._notify_url)
+        if "://localhost" not in webhook_url and "://192.168." not in webhook_url:
+            payment_data['webhookUrl'] = webhook_url
+
+        # Add if transection has cardToken
+        if self.mollie_card_token:
+            payment_data['payment'] = {'cardToken': self.mollie_card_token}
+
+        # Add if transection has issuer
+        if self.mollie_payment_issuer:
+            payment_data['payment'] = {'issuer': self.mollie_payment_issuer}
+
+        # result = self._mollie_make_request(payment_data)
+        result = self.acquirer_id._mollie_make_request('/payments', data=payment_data, method="POST")
+
+        # We are setting acquirer reference as we are receiving it before 3DS payment
+        # So we can identify transaction with mollie respose
+        if result and result.get('id'):
+            self.acquirer_reference = result.get('id')
+
         return result
 
     def _prepare_mollie_address(self):
@@ -210,19 +254,10 @@ class PaymentTransaction(models.Model):
 
     def _mollie_get_order_lines(self, order):
         lines = []
-        if order._name == "sale.order":
-            order_lines = order.order_line.filtered(lambda l: not l.display_type)  # ignore notes and section lines
-            lines = self._mollie_prepare_so_lines(order_lines)
-        if order._name == "account.move":
-            order_lines = order.invoice_line_ids.filtered(lambda l: not l.display_type)  # ignore notes and section lines
-            lines = self._mollie_prepare_invoice_lines(order_lines)
-        return lines
-
-    def _mollie_prepare_so_lines(self, lines):
-        result = []
-        for line in lines:
-            line_data = self._mollie_prepare_lines_common(line)
-            line_data.update({
+        for line in order.order_line:
+            line_data = {
+                'name': line.name,
+                "type": "physical",
                 'quantity': int(line.product_uom_qty),    # TODO: Mollie does not support float. Test with float amount
                 'unitPrice': {
                     'currency': line.currency_id.name,
@@ -237,69 +272,29 @@ class PaymentTransaction(models.Model):
                     'currency': line.currency_id.name,
                     'value': "%.2f" % line.price_tax,
                 }
-            })
-            result.append(line_data)
-        return result
+            }
+            if line.product_id.type == 'service':
+                line_data['type'] = 'digital'  # We are considering service product as digital as we don't do shipping for it.
 
-    def _mollie_prepare_invoice_lines(self, lines):
-        """
-            Note: Line pricing calculation
-            Mollie need 1 unit price with tax included (with discount if any).
-            Sale order line we have field for tax included/excluded unit price. But
-            Invoice does not have such fields so we need to compute it manually with
-            given calculation.
+            if 'is_delivery' in line._fields and line.is_delivery:
+                line_data['type'] = 'shipping_fee'
 
-            Mollie needed fields and calculation (Descount is applied all unit price)
-            unitPrice: tax included price for single unit
-                unitPrice = total_price_tax_included / qty
-                totalAmount = total_price_tax_included
-                vatRate = total of tax percentage
-                vatAmount = total_price_tax_included - total_price_tax_excluded
-        """
-        result = []
-        for line in lines:
-            line_data = self._mollie_prepare_lines_common(line)
-            line_data.update({
-                'quantity': int(line.quantity),    # TODO: Mollie does not support float. Test with float amount
-                'unitPrice': {
-                    'currency': line.currency_id.name,
-                    'value': "%.2f" % (line.price_total / int(line.quantity))
-                },
-                'totalAmount': {
-                    'currency': line.currency_id.name,
-                    'value': "%.2f" % line.price_total,
-                },
-                'vatRate': "%.2f" % sum(line.tax_ids.mapped('amount')),
-                'vatAmount': {
-                    'currency': line.currency_id.name,
-                    'value': "%.2f" % (line.price_total - line.price_subtotal),
-                }
-            })
-            result.append(line_data)
-        return result
+            if line.product_id and 'website_url' in line.product_id._fields:
+                base_url = self.get_base_url()
+                line_data['productUrl'] = urls.url_join(base_url, line.product_id.website_url)
 
-    def _mollie_prepare_lines_common(self, line):
+            line_data['metadata'] = {
+                'line_id': line.id,
+                'product_id': line.product_id.id
+            }
+            lines.append(line_data)
+        return lines
 
-        product_data = {
-            'name': line.name,
-            "type": "physical",
-        }
-
-        if line.product_id.type == 'service':
-            product_data['type'] = 'digital'  # We are considering service product as digital as we don't do shipping for it.
-
-        if 'is_delivery' in line._fields and line.is_delivery:
-            product_data['type'] = 'shipping_fee'
-
-        if line.product_id and 'website_url' in line.product_id._fields:
-            base_url = self.get_base_url()
-            product_data['productUrl'] = urls.url_join(base_url, line.product_id.website_url)
-
-        # Metadata - used to sync delivery data with shipment API
-        product_data['metadata'] = {
-            'line_id': line.id,
-            'product_id': line.product_id.id
-        }
-
-        return product_data
-
+    def _mollie_get_payment_data(self, transection_reference):
+        """ Sending force_payment=True will send payment data even if transection_reference is for order api """
+        mollie_data = False
+        if transection_reference.startswith('ord_'):
+            mollie_data = self._mollie_make_request(f'/orders/{transection_reference}', params={'embed': 'payments'}, method="GET")
+        if transection_reference.startswith('tr_'):    # This is not used
+            mollie_data = self._mollie_make_request(f'/payments/{transection_reference}', method="GET")
+        return mollie_data

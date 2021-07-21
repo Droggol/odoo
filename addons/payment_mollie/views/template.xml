@@ -15,7 +15,7 @@
 <!-- Mollie supports multiple payment methods (acquirer)
     This templates render all enabled payment options-->
 <template id="mollie_payment_methods_select">
-    <t t-set="mollie_payment_methods" t-value="acquirer.mollie_get_active_methods(website_sale_order or invoice)"/>
+    <t t-set="mollie_payment_methods" t-value="acquirer._mollie_get_supported_methods(sale_order or website_sale_order, invoice, amount, currency)"/>
     <t t-foreach="mollie_payment_methods" t-as="payment_method">
         <div name="o_payment_option_card" t-attf-class="card-body o_payment_option_card #{'d-none' if payment_method.method_code == 'applepay' else ''}">
             <label>
