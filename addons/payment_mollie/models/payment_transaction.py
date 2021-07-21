@@ -25,11 +25,6 @@ class PaymentTransaction(models.Model):
     def _compute_reference(self, provider, prefix=None, separator='-', **kwargs):
         if provider == 'mollie':
             if not prefix:
-                # If no prefix is provided, it could mean that a module has passed a kwarg intended
-                # for the `_compute_reference_prefix` method, as it is only called if the prefix is
-                # empty. We call it manually here because singularizing the prefix would generate a
-                # default value if it was empty, hence preventing the method from ever being called
-                # and the transaction from received a reference named after the related document.
                 prefix = self.sudo()._compute_reference_prefix(
                     provider, separator, **kwargs
                 ) or None
@@ -43,9 +38,14 @@ class PaymentTransaction(models.Model):
 
         payment_data = self._mollie_create_payment_record(processing_values)
 
+        if payment_data["_links"].get("checkout"):
+            redirect_url = payment_data["_links"]["checkout"]["href"]
+        else:
+            redirect_url = payment_data.get('redirectUrl')
+
         return {
             'status': payment_data.get('status'),
-            'redirect_url': payment_data["_links"]["checkout"]["href"]
+            'redirect_url': redirect_url
         }
 
     def _get_tx_from_feedback_data(self, provider, data):
@@ -120,6 +120,8 @@ class PaymentTransaction(models.Model):
             return None
 
         order_type = 'Sale Order' if order_source._name == 'sale.order' else 'Invoice'
+        base_url = self.acquirer_id.get_base_url()
+        redirect_url = urls.url_join(base_url, MollieController._return_url)
 
         payment_data = {
             'method': self.mollie_payment_method,
@@ -140,13 +142,13 @@ class PaymentTransaction(models.Model):
             },
 
             'locale': self.acquirer_id._mollie_user_locale(),
-            'redirectUrl': self._mollie_redirect_url(),
+            'redirectUrl': f'{redirect_url}?ref={self.reference}'
         }
 
         # Mollie throws error with local URLs
-        # webhook_url = self._mollie_webhook_url(self.id)
-        # if "://localhost" not in webhook_url and "://192.168." not in webhook_url:
-        #     payment_data['webhookUrl'] = webhook_url
+        webhook_url = urls.url_join(base_url, MollieController._notify_url)
+        if "://localhost" not in webhook_url and "://192.168." not in webhook_url:
+            payment_data['webhookUrl'] = webhook_url
 
         # Add if transection has cardToken
         if self.mollie_card_token:
@@ -301,7 +303,3 @@ class PaymentTransaction(models.Model):
 
         return product_data
 
-    def _mollie_redirect_url(self):
-        base_url = self.get_base_url()
-        redirect_url = urls.url_join(base_url, MollieController._return_url)
-        return "%s?ref=%s" % (redirect_url, self.reference)

@@ -32,7 +32,7 @@ class PaymentAcquirerMollie(models.Model):
         if self.provider != 'mollie':
             return res
         return {
-            'mollie_card_token': values.get('mollie_card_token'),
+            'mollie_card_token': values.get('mollie_token'),
             'mollie_payment_method': values.get('mollie_method'),
             'mollie_payment_issuer': values.get('mollie_issuer')
         }

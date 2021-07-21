@@ -28,3 +28,16 @@ class MolliePaymentMethod(models.Model):
     supports_order_api = fields.Boolean(string="Supports Order API")
     supports_payment_api = fields.Boolean(string="Supports Payment API")
     payment_issuer_ids = fields.Many2many('mollie.payment.method.issuer', string='Issuers')
+
+
+class MolliePaymentIssuers(models.Model):
+    _name = 'mollie.payment.method.issuer'
+    _description = 'Mollie payment method issuers'
+    _order = "sequence, id"
+
+    name = fields.Char()
+    sequence = fields.Integer()
+    parent_id = fields.Many2one('mollie.payment.method')
+    payment_icon_ids = fields.Many2many('payment.icon', string='Supported Payment Icons')
+    issuers_code = fields.Char()
+    active = fields.Boolean(default=True)

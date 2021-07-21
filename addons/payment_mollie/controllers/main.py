@@ -22,6 +22,14 @@ class MollieController(http.Controller):
             pass  # The customer has cancelled the payment, don't do anything
         return request.redirect('/payment/status')
 
+    @http.route(_notify_url, type='http', auth='public', methods=['GET', 'POST'], csrf=False, sitemap=False)
+    def mollie_notify(self, **data):
+        if data:
+            request.env['payment.transaction'].sudo()._handle_feedback_data('mollie', data)
+        else:
+            pass  # The customer has cancelled the payment, don't do anything
+        return request.redirect('/payment/status')
+
     # @http.route("/payment/mollie/action", type='http', auth="public", methods=['POST'], csrf=False, sitemap=False)
     # def mollie_redirect(self, **post):
     #     if post.get('checkout_url'):
@@ -48,7 +56,7 @@ class MollieController(http.Controller):
     #             data = transaction.acquirer_id._mollie_get_payment_data(transaction.acquirer_reference)
     #             request.env["payment.transaction"].sudo().form_feedback(data, "mollie")
 
-    #             if transaction.state in ['done', 'cancel']:
+    #             if transaction.state in ['done', 'cancel' ,'error']:
 
     #                 # We will process the payment from webhook confirmation. payment confirmation might
     #                 # be delayed and user might left the screen (may be user paid via QR and left the screen).
@@ -61,4 +69,4 @@ class MollieController(http.Controller):
     #                 # We do not need next webhooks if payment is already done or canceled
     #                 return Response("OK", status=200)
 
-    #     return Response("Not Confirmed", status=418)
+    #     return Response("Not Confirmed", status=503)

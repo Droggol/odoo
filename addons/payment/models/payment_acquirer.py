@@ -182,7 +182,7 @@ class PaymentAcquirer(models.Model):
                 ('code', '=', acquirer.provider)
             ], limit=1)
             if acquirer.journal_id:
-                if not payment_method:
+                if payment_method:
                     self.env['account.payment.method.line'].create({
                         'payment_method_id': self._get_default_payment_method(),
                         'journal_id': self.journal_id.id,

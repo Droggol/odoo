@@ -37,7 +37,8 @@ odoo.define('mollie.payment.form', function (require) {
                 return this._super(...arguments);
             }
             this._setPaymentFlow('direct');
-            var $creditCardContainer = this.$(`#o_payment_mollie_inline_form_${paymentOptionId} #o_mollie_component`);
+            var $creditCardContainer = this.$(`#o_payment_mollie_method_inline_form_${paymentOptionId} #o_mollie_component`);
+            debugger;
             if (!$creditCardContainer.length || this.mollieComponentLoaded) {
                 return this._super(...arguments);
             }
@@ -59,19 +60,19 @@ odoo.define('mollie.payment.form', function (require) {
                 },
             });
             var lang = context.lang || 'en_US';
-            var mollieComponent = Mollie(mollieProfileId, {locale: lang, testmode: mollieTestMode});
-            this._createMollieComponent(mollieComponent, 'cardHolder', '#mollie-card-holder');
-            this._createMollieComponent(mollieComponent, 'cardNumber', '#mollie-card-number');
-            this._createMollieComponent(mollieComponent, 'expiryDate', '#mollie-expiry-date');
-            this._createMollieComponent(mollieComponent, 'verificationCode', '#mollie-verification-code');
+            this.mollieComponent = Mollie(mollieProfileId, { locale: lang, testmode: mollieTestMode });
+            this._createMollieComponent('cardHolder', '#mollie-card-holder');
+            this._createMollieComponent('cardNumber', '#mollie-card-number');
+            this._createMollieComponent('expiryDate', '#mollie-expiry-date');
+            this._createMollieComponent('verificationCode', '#mollie-verification-code');
             this.mollieComponentLoaded = true;
         },
 
         /**
         * @private
         */
-        _createMollieComponent: function (mollieComponent, type, componentId) {
-            var component = mollieComponent.createComponent(type);
+        _createMollieComponent: function (type, componentId) {
+            var component = this.mollieComponent.createComponent(type);
             component.mount(componentId);
 
             var $componentError = this.$(`${componentId}-error`);
@@ -107,10 +108,57 @@ odoo.define('mollie.payment.form', function (require) {
             if (provider !== 'mollie') {
                 return this._super(...arguments);
             }
-            if (processingValues.status == 'created') {
-                window.location = processingValues.redirect_url;
+            window.location = processingValues.redirect_url;
+        },
+
+        _processPayment: function (provider, paymentOptionId, flow) {
+            if (provider !== 'mollie') {
+                return this._super(...arguments);
+            }
+            let transactionParams = this._prepareTransactionRouteParams('mollie', paymentOptionId, 'direct');
+            const creditCardChecked = this.$('input[data-mollie-method="creditcard"]:checked').length == 1;
+            if (creditCardChecked) {
+                return this._prepareMollieCardToken()
+                    .then((cardToken) => {
+                        transactionParams['mollie_token'] = cardToken;
+                        this._submitMollieTransaction(provider, paymentOptionId, transactionParams)
+                    });
+            } else {
+                return this._submitMollieTransaction(provider, paymentOptionId, transactionParams);
             }
         },
+
+        _prepareMollieCardToken: function () {
+            return this.mollieComponent.createToken().then(result => {
+                if (result.error) {
+                    this.displayNotification({
+                        type: 'danger',
+                        title: _t("Error"),
+                        message: result.error.message,
+                        sticky: false,
+                    });
+                    this.enableButton();
+                }
+                return result.token || false;
+            });
+        },
+
+        _submitMollieTransaction: function (provider, paymentOptionId, transactionParams) {
+            return this._rpc({
+                route: this.txContext.transactionRoute,
+                params: transactionParams
+            }).then(processingValues => {
+                return this._processDirectPayment(provider, paymentOptionId, processingValues);
+            }).guardedCatch(error => {
+                error.event.preventDefault();
+                this._displayError(
+                    _t("Server Error"),
+                    _t("We are not able to process your payment."),
+                    error.message.data.message
+                );
+            });
+        }
+
 
     });
 

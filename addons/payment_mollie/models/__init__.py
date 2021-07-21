@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from . import account_payment_method
-from . import mollie_method
-from . import mollie_issuers
+from . import mollie
 from . import payment_acquirer
 from . import payment_transaction
