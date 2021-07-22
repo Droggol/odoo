@@ -306,7 +306,6 @@ class PaymentAcquirerMollie(models.Model):
             mollie_data = self._mollie_make_request(f'/payments/{transection_reference}', method="GET")
         return mollie_data
 
-
     # -------------------------
     # Helper methods for mollie
     # -------------------------

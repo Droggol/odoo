@@ -36,7 +36,7 @@ class PaymentTransaction(models.Model):
         if self.provider != 'mollie':
             return res
 
-        payment_data = self._mollie_create_transection_record(processing_values)
+        payment_data = self._create_mollie_record_from_transection()
 
         if payment_data["_links"].get("checkout"):
             redirect_url = payment_data["_links"]["checkout"]["href"]
@@ -100,23 +100,44 @@ class PaymentTransaction(models.Model):
                 "Mollie: " + _("Received data with invalid payment status: %s", payment_status)
             )
 
-    def _mollie_create_transection_record(self, values):
+    def _create_mollie_record_from_transection(self):
+        """ In order to capture payment from mollie we need to create a record on mollie.
+
+        Mollie have 2 type of api to create payment record,
+         * order api (used for sales orders)
+         * payment api (used for invoices and other payments)
+
+        Different methods suppports diffrent api we choose the api based on that. Also
+        we have used payment api as fallback api if order api fails.
+
+        Note: self.ensure_one()
+
+        :return: None
+        """
         self.ensure_one()
         method_record = self.acquirer_id.mollie_methods_ids.filtered(lambda m: m.method_code == self.mollie_payment_method)
 
         result = None
         if self.sale_order_ids and method_record.supports_order_api:
-            result = self._mollie_create_record('order')
+            # Order API
+            result = self._mollie_create_payment_record('order')
 
-        # Fallback to payment API
+        # Payment API
         if (result and result.get('error') or result is None) and method_record.supports_payment_api:
             if result and result.get('error'):
                 _logger.warning("Can not use order api due to '%s' fallback on payment" % (result.get('error')))
-            result = self._mollie_create_record('payment')
+            result = self._mollie_create_payment_record('payment')
 
         return result
 
-    def _mollie_create_record(self, api_type):
+    def _mollie_create_payment_record(self, api_type):
+        """ This method prepare the payload based in api type and then
+        creates the payment/order record in mollie based on api type.
+
+        :param str api_type: api is selected based on this parameter
+        :return: data of created record received from mollie api
+        :rtype: dict
+        """
 
         base_url = self.acquirer_id.get_base_url()
         redirect_url = urls.url_join(base_url, MollieController._return_url)
@@ -147,9 +168,10 @@ class PaymentTransaction(models.Model):
             # Payment api parameters
             payment_data['description'] = self.reference
 
-        # Mollie throws error with local URLs
+        # Mollie rejects some local ips/URLs
+        # https://help.mollie.com/hc/en-us/articles/213470409
         webhook_url = urls.url_join(base_url, MollieController._notify_url)
-        if "://localhost" not in webhook_url and "://192.168." not in webhook_url:
+        if "://localhost" not in webhook_url and "://192.168." not in webhook_url and "://127." not in webhook_url:
             payment_data['webhookUrl'] = f'{webhook_url}?ref={self.reference}'
 
         # Add if transection has cardToken
@@ -163,59 +185,24 @@ class PaymentTransaction(models.Model):
         result = self.acquirer_id._api_mollie_create_payment_record(api_type, payment_data)
 
         # We are setting acquirer reference as we are receiving it before 3DS payment
-        # So we can identify transaction with mollie respose
+        # So we can verify the validity of the transecion
         if result and result.get('id'):
             self.acquirer_reference = result.get('id')
         return result
 
-    def _prepare_mollie_address(self):
-        self.ensure_one()
-        result = {}
-        partner = self.partner_id
-        if not partner:
-            return result
-
-        # Build the name becasue 'givenName' and 'familyName' is required.
-        # So we will repeat the name is one is not present
-        name_parts = partner.name.split(" ")
-        result['givenName'] = name_parts[0]
-        result['familyName'] = ' '.join(name_parts[1:]) if len(name_parts) > 1 else result['givenName']
-
-        # Phone
-        phone = self._mollie_phone_format(self.partner_phone)
-        if phone:
-            result['phone'] = phone
-        result['email'] = self.partner_email
-
-        # Address
-        result["streetAndNumber"] = self.partner_address or ' '
-        result["postalCode"] = self.partner_zip or ' '
-        result["city"] = self.partner_city or ' '
-        result["country"] = self.partner_country_id and self.partner_country_id.code
-        return result
-
-    @api.model
-    def _mollie_phone_format(self, phone):
-        """ Only E164 phone number is allowed in mollie """
-        phone = False
-        if phone:
-            try:
-                parse_phone = phonenumbers.parse(self.phone, None)
-                if parse_phone:
-                    phone = phonenumbers.format_number(
-                        parse_phone, phonenumbers.PhoneNumberFormat.E164
-                    )
-            except Exception:
-                _logger.warning("Can not format customer phone number for mollie")
-        return phone
-
     def _mollie_get_order_lines(self, order):
+        """ This method prepares order line data for order api
+
+        :param order: sale.order record based on this payload will be genrated
+        :return: order line data for order api
+        :rtype: dict
+        """
         lines = []
         for line in order.order_line:
             line_data = {
                 'name': line.name,
                 "type": "physical",
-                'quantity': int(line.product_uom_qty),    # TODO: Mollie does not support float. Test with float amount
+                'quantity': int(line.product_uom_qty),    # Mollie does not support float.
                 'unitPrice': {
                     'currency': line.currency_id.name,
                     'value': "%.2f" % line.price_reduce_taxinc
@@ -252,3 +239,49 @@ class PaymentTransaction(models.Model):
                     })
             lines.append(line_data)
         return lines
+
+    def _prepare_mollie_address(self):
+        """ This method prepare address used in order api of mollie
+
+        :return: address data for order api
+        :rtype: dict
+        """
+        self.ensure_one()
+        result = {}
+        partner = self.partner_id
+        if not partner:
+            return result
+
+        # Build the name becasue 'givenName' and 'familyName' is required.
+        # So we will repeat the name is one is not present
+        name_parts = partner.name.split(" ")
+        result['givenName'] = name_parts[0]
+        result['familyName'] = ' '.join(name_parts[1:]) if len(name_parts) > 1 else result['givenName']
+
+        # Phone
+        phone = self._mollie_phone_format(self.partner_phone)
+        if phone:
+            result['phone'] = phone
+        result['email'] = self.partner_email
+
+        # Address
+        result["streetAndNumber"] = self.partner_address or ' '
+        result["postalCode"] = self.partner_zip or ' '
+        result["city"] = self.partner_city or ' '
+        result["country"] = self.partner_country_id and self.partner_country_id.code
+        return result
+
+    @api.model
+    def _mollie_phone_format(self, phone):
+        """ Mollie only allows E164 phone numbers so this method checks whether its validity."""
+        phone = False
+        if phone:
+            try:
+                parse_phone = phonenumbers.parse(self.phone, None)
+                if parse_phone:
+                    phone = phonenumbers.format_number(
+                        parse_phone, phonenumbers.PhoneNumberFormat.E164
+                    )
+            except Exception:
+                _logger.warning("Can not format customer phone number for mollie")
+        return phone
