@@ -111,10 +111,7 @@ odoo.define('mollie.payment.form', function (require) {
             if ($checkedRadios.data('mollie-issuers')) {
                 mollieData['mollie_issuer'] = this.$(`#o_payment_mollie_method_inline_form_${paymentOptionId} .o_mollie_issuer.active`).data('mollie-issuer');
             }
-            return {
-                ...transactionRouteParams,
-                ...mollieData
-            };
+            return {...transactionRouteParams, ...mollieData};
         },
 
         /**
