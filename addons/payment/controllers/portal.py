@@ -304,7 +304,7 @@ class PaymentPortal(portal.CustomerPortal):
             'tokenize': tokenize,
             'validation_route': validation_route,
             'landing_route': landing_route,
-            **custom_create_values,
+            **(custom_create_values or {}),
         })  # In sudo mode to allow writing on callback fields
         # Validation routes require the transaction id
         tx_sudo.validation_route = validation_route and f'{validation_route}?tx_id={tx_sudo.id}'
