@@ -215,7 +215,7 @@ class PaymentAcquirerMollie(models.Model):
                 methods = methods.filtered(lambda m: not m.country_ids or country_code in m.country_ids.mapped('code'))
 
         # Hide methods if mollie does not supports them (checks via api call)
-        supported_methods = self.sudo()._api_mollie_get_active_payment_methods(extra_params=extra_params, silent_errors=True) or {}  # sudo as public user do not have access to keys
+        supported_methods = self.sudo()._api_mollie_get_active_payment_methods(extra_params=extra_params)  # sudo as public user do not have access to keys
         methods = methods.filtered(lambda m: m.method_code in supported_methods.keys())
 
         return methods
@@ -278,23 +278,23 @@ class PaymentAcquirerMollie(models.Model):
         params = {'include': 'issuers', 'includeWallets': 'applepay', **extra_params}
 
         # get payment api methods
-        payemnt_api_methods = self._mollie_make_request('/methods', params=params, method="GET")
-        if payemnt_api_methods.get('count'):
+        payemnt_api_methods = self._mollie_make_request('/methods', params=params, method="GET", silent_errors=True)
+        if payemnt_api_methods and payemnt_api_methods.get('count'):
             for method in payemnt_api_methods['_embedded']['methods']:
                 method['support_payment_api'] = True
                 result[method['id']] = method
 
         # get order api methods
         params['resource'] = 'orders'
-        order_api_methods = self._mollie_make_request('/methods', params=params, method="GET")
-        if order_api_methods.get('count'):
+        order_api_methods = self._mollie_make_request('/methods', params=params, method="GET", silent_errors=True)
+        if order_api_methods and order_api_methods.get('count'):
             for method in order_api_methods['_embedded']['methods']:
                 if method['id'] in result:
                     result[method['id']]['support_order_api'] = True
                 else:
                     method['support_order_api'] = True
                     result[method['id']] = method
-        return result
+        return result or {}
 
     def _api_mollie_create_payment_record(self, api_type, payment_data):
         endpoint = '/orders' if api_type == 'order' else '/payments'
