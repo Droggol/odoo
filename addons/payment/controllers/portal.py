@@ -276,7 +276,7 @@ class PaymentPortal(portal.CustomerPortal):
                 _("The payment should either be direct, with redirection, or made by a token.")
             )
 
-        # This will allow you to generate the create values if transection from data
+        # This will allow you to generate the create values for transection based on data
         # submitted from web (transection route). This is helpful when payment processing
         # needs some data that are generated from client side (e.g. short-term card token in mollie acquirer)
         custom_create_values = custom_create_values or {}
