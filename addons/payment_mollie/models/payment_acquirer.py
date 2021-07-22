@@ -56,6 +56,7 @@ class PaymentAcquirerMollie(models.Model):
     # --------------
 
     def action_mollie_sync_methods(self):
+        """ This method will sync mollie methods and translations via API """
         methods = self._api_mollie_get_active_payment_methods()
         if methods:
             self._sync_mollie_methods(methods)
@@ -66,9 +67,11 @@ class PaymentAcquirerMollie(models.Model):
     # ----------------
 
     def _sync_mollie_methods(self, methods_data):
-        """ Create/Update the mollie payment methods based on configuration in the mollie.com.
+        """ Create/Update the mollie payment methods based on configuration
+        in the mollie.com. This will automatically activate/deactivate methods
+        based on your configurateion on the mollie.com
 
-        :param dict methods_data: enabled method's data from mollie
+        :param dict methods_data: Mollie's method data received from api
         """
 
         # Activate/Deactivate existing methods
@@ -126,8 +129,14 @@ class PaymentAcquirerMollie(models.Model):
             MolliePaymentMethod.create(create_vals)
 
     def _create_method_translations(self):
-        """ This method add translated terms for the method names.
-            These translations are provided by mollie locale.
+        """ This method add translated terms for the method names. These translations
+            are provided by mollie locale.
+
+            This is required as the method names are stored in fields. Luckily mollie provides
+            translated values so we create the translation terms from mollie.
+
+            Note: We only create the terms if it is not present becasue user might have enterd
+            his own translation values,
         """
         IrTranslation = self.env['ir.translation']
         supported_locale = self._mollie_get_supported_locale()
@@ -143,7 +152,7 @@ class PaymentAcquirerMollie(models.Model):
                 if method.id not in translated_method_ids:
                     method_to_translate.append(method.id)
 
-            # This will avoid unnessesorry network calls
+            # This will help avoiding unnecessary network calls
             if method_to_translate:
                 methods_data = self._api_mollie_get_active_payment_methods(extra_params={'locale': lang.code})
                 for method_id in method_to_translate:
@@ -161,14 +170,20 @@ class PaymentAcquirerMollie(models.Model):
                         })
 
     def _mollie_get_supported_methods(self, order, invoice, amount, currency):
-        """ This method returns mollie's possible payment method based amount, currency and billing country.
+        """ Mollie provides multiple payment methods in single payment acquirer.
+            Support of these varies based on based amount, currency and billing country.
+            So this method will filters the mollie's supported payment method based amount,
+            currency and billing country.
 
-        :param dict order: order record for which this transection is generated
-        :return details of supported methods
-        :rtype: dict
+            Note: we also filter the methods based on geoip and voucher configurations.
+
+            :param dict order: order record for which this transection is generated
+            :return details of supported methods
+            :rtype: dict
         """
         methods = self.mollie_methods_ids.filtered(lambda m: m.active and m.active_on_shop)
 
+        # Credit card component is not supported if mollie_profile_id is not configured
         if not self.sudo().mollie_profile_id:
             methods = methods.filtered(lambda m: m.method_code != 'creditcard')
 
@@ -199,20 +214,11 @@ class PaymentAcquirerMollie(models.Model):
             if country_code:
                 methods = methods.filtered(lambda m: not m.country_ids or country_code in m.country_ids.mapped('code'))
 
-        # Hide methods if mollie does not supports them
-        suppported_methods = self.sudo()._api_mollie_get_active_payment_methods(extra_params=extra_params)   # sudo as public user do not have access
+        # Hide methods if mollie does not supports them (checks via api call)
+        suppported_methods = self.sudo()._api_mollie_get_active_payment_methods(extra_params=extra_params)   # sudo as public user do not have access to keys
         methods = methods.filtered(lambda m: m.method_code in suppported_methods.keys())
 
         return methods
-
-    def _mollie_get_payment_data(self, transection_reference):
-        """ Sending force_payment=True will send payment data even if transection_reference is for order api """
-        mollie_data = False
-        if transection_reference.startswith('ord_'):
-            mollie_data = self._mollie_make_request(f'/orders/{transection_reference}', params={'embed': 'payments'}, method="GET")
-        if transection_reference.startswith('tr_'):    # This is not used
-            mollie_data = self._mollie_make_request(f'/payments/{transection_reference}', method="GET")
-        return mollie_data
 
     # -----------
     # API methods
@@ -286,6 +292,20 @@ class PaymentAcquirerMollie(models.Model):
                     method['support_order_api'] = True
                     result[method['id']] = method
         return result
+
+    def _api_mollie_create_peyment_record(self, api_type, payment_data):
+        endpoint = '/orders' if api_type == 'order' else '/payments'
+        return self._mollie_make_request(endpoint, data=payment_data, method="POST")
+
+    def _api_mollie_get_payment_data(self, transection_reference):
+        """ Sending force_payment=True will send payment data even if transection_reference is for order api """
+        mollie_data = False
+        if transection_reference.startswith('ord_'):
+            mollie_data = self._mollie_make_request(f'/orders/{transection_reference}', params={'embed': 'payments'}, method="GET")
+        if transection_reference.startswith('tr_'):    # This is not used
+            mollie_data = self._mollie_make_request(f'/payments/{transection_reference}', method="GET")
+        return mollie_data
+
 
     # -------------------------
     # Helper methods for mollie

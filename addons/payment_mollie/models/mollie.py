@@ -31,7 +31,7 @@ class MolliePaymentIssuers(models.Model):
     _description = 'Mollie payment method issuers'
     _order = "sequence, id"
 
-    name = fields.Char()
+    name = fields.Char(translate=True)
     sequence = fields.Integer()
     acquirer_id = fields.Many2one('mollie.payment.method', string='Acquirer')
     payment_icon_ids = fields.Many2many('payment.icon', string='Supported Payment Icons')
