@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
-import logging
-
 from odoo.osv import expression
-from odoo import _, api, fields, models
-
-_logger = logging.getLogger(__name__)
+from odoo import fields, models
 
 
 class MolliePaymentMethod(models.Model):
@@ -16,7 +12,7 @@ class MolliePaymentMethod(models.Model):
 
     name = fields.Char(translate=True)
     sequence = fields.Integer()
-    acquirer_id = fields.Many2one('payment.acquirer')  # This will be always mollie
+    acquirer_id = fields.Many2one('payment.acquirer', string='Acquirer')  # This will be always mollie
     method_code = fields.Char(string="Method code")
     payment_icon_ids = fields.Many2many('payment.icon', string='Supported Payment Icons')
     active = fields.Boolean(default=True)
@@ -37,7 +33,7 @@ class MolliePaymentIssuers(models.Model):
 
     name = fields.Char()
     sequence = fields.Integer()
-    acquirer_id = fields.Many2one('mollie.payment.method')
+    acquirer_id = fields.Many2one('mollie.payment.method', string='Acquirer')
     payment_icon_ids = fields.Many2many('payment.icon', string='Supported Payment Icons')
     issuers_code = fields.Char()
     active = fields.Boolean(default=True)
@@ -47,10 +43,9 @@ class MollieVoucherLines(models.Model):
     _name = 'mollie.voucher.line'
     _description = 'Mollie voucher method'
 
-    method_id = fields.Many2one('mollie.payment.method')
-    method_id = fields.Many2one('mollie.payment.method')
-    category_ids = fields.Many2many('product.category')
-    product_ids = fields.Many2many('product.template')
+    method_id = fields.Many2one('mollie.payment.method', string='Mollie Method')
+    category_ids = fields.Many2many('product.category', string='Product Categories')
+    product_ids = fields.Many2many('product.template', string='Products')
     mollie_voucher_category = fields.Selection([('meal', 'Meal'), ('eco', 'Eco'), ('gift', 'Gift')], required=True)
 
 
