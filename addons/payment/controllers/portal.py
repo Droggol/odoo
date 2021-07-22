@@ -288,7 +288,6 @@ class PaymentPortal(portal.CustomerPortal):
             **(custom_create_values or {}),
             **kwargs
         )
-
         if validation_route:  # Acquirers determine the amount and currency in validation operations
             amount = acquirer_sudo._get_validation_amount()
             currency_id = acquirer_sudo._get_validation_currency().id
