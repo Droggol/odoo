@@ -276,8 +276,11 @@ class PaymentPortal(portal.CustomerPortal):
                 _("The payment should either be direct, with redirection, or made by a token.")
             )
 
+        # This will allow you to generate the create values if transection from data
+        # submitted from web (transection route). This is helpful when payment processing
+        # needs some data that are generated from client side (e.g. short-term card token in mollie acquirer)
         custom_create_values = custom_create_values or {}
-        custom_create_values.update(acquirer_sudo._get_custom_create_values(kwargs))  # used for generate transection create values from submitted data
+        custom_create_values.update(acquirer_sudo._get_custom_create_values(kwargs))
 
         if invoice_id:
             custom_create_values['invoice_ids'] = [Command.set([int(invoice_id)])]

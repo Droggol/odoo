@@ -414,6 +414,11 @@ class PaymentAcquirer(models.Model):
         Override this method if you wants transection record to have custom values
         passed from the web page.
 
+
+        Note: you should use  `_get_custom_create_values` of transecion if you wants
+        custom values based on transection values. This method is used to proccess
+        data submitted from web(transection route)
+
         :param dict values: Extra values submitted from the web page
         :return: The dict of acquirer-specific create values
         :rtype: dict
