@@ -10,7 +10,7 @@
                 <group attrs="{'invisible': [('provider', '!=', 'mollie')]}">
                     <field name="mollie_api_key_test" attrs="{'required':[ ('provider', '=', 'mollie'), ('state', '=', 'test')]}" password="True"/>
                     <field name="mollie_api_key_prod" attrs="{'required':[ ('provider', '=', 'mollie'), ('state', '=', 'enabled')]}" password="True"/>
-                    <field name="mollie_profile_id" attrs="{'required':[ ('provider', '=', 'mollie'), ('state', '=', 'enabled')]}" password="True"/>
+                    <field name="mollie_profile_id" password="True"/>
                     <label string=" " for="mollie_profile_id"> </label>
                     <small class="text-muted"> Credit card option will not be displayed without profile ID.
                         <br/>
