@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="acquirer_form_view_mollie" model="ir.ui.view">
+        <field name="name">payment.acquirer.form.inherit</field>
+        <field name="model">payment.acquirer</field>
+        <field name="inherit_id" ref="payment.payment_acquirer_form"/>
+        <field name="priority">20</field>
+        <field name="arch" type="xml">
+            <xpath expr='//group[@name="acquirer"]' position='inside'>
+                <group attrs="{'invisible': [('provider', '!=', 'mollie')]}">
+                    <field name="mollie_api_key_test" attrs="{'required':[ ('provider', '=', 'mollie'), ('state', '=', 'test')]}" password="True"/>
+                    <field name="mollie_api_key_prod" attrs="{'required':[ ('provider', '=', 'mollie'), ('state', '=', 'enabled')]}" password="True"/>
+                    <field name="mollie_profile_id" password="True"/>
+                    <label string=" " for="mollie_profile_id"> </label>
+                    <small class="text-muted"> Credit card option will not be displayed without profile ID.
+                        <br/>
+                        <b><a href="https://www.mollie.com/dashboard/developers/api-keys" target="_new"> Get your API keys <i class="fa fa-arrow-right"> </i> </a></b>
+                        <br/>
+                        <br/>
+                    </small>
+                </group>
+            </xpath>
+            <page name="acquirer_credentials" position="after">
+                <page string="Mollie Payment Methods" attrs="{'invisible': [('provider', '!=', 'mollie')]}">
+                    <field name="mollie_methods_ids" >
+                        <tree create="0">
+                            <field name="sequence" widget="handle"/>
+                            <field name="name" />
+                            <field name="method_code" optional="hide"/>
+                            <field name="payment_icon_ids" widget="many2many_tags"/>
+                            <field name="active" invisible="1"/>
+                            <field name="active_on_shop" widget="boolean_toggle"/>
+                            <field name="country_ids" widget="many2many_tags"/>
+                            <field name="supports_order_api" invisible="1"/>
+                            <field name="supports_payment_api" invisible="1"/>
+                            <field name="payment_issuer_ids" widget="many2many_tags" invisible="1"/>
+                        </tree>
+                        <form>
+                            <div class="oe_title">
+                                <h1>
+                                    <field name="name" placeholder="Name"/>
+                                </h1>
+                                <group>
+                                    <field name="method_code" readonly="1"/>
+                                </group>
+                            </div>
+                            <notebook>
+                                <page name="config" string="Configuration">
+                                    <group>
+                                        <group>
+                                            <field name="active" invisible="1"/>
+                                            <field name="active_on_shop" widget="boolean_toggle"/>
+                                        </group>
+                                        <group>
+                                            <field name="payment_icon_ids" widget="many2many_tags"/>
+                                            <field name="country_ids" widget="many2many_tags"/>
+                                        </group>
+                                    </group>
+                                </page>
+                                <page string="Voucher Configuration" name="voucher_config" attrs="{'invisible': [('method_code', '!=', 'voucher')]}">
+                                    <field name="mollie_voucher_ids">
+                                        <tree editable="bottom">
+                                            <field name="mollie_voucher_category"/>
+                                            <field name="category_ids" widget="many2many_tags"/>
+                                            <field name="product_ids" widget="many2many_tags"/>
+                                        </tree>
+                                    </field>
+                                </page>
+                            </notebook>
+                        </form>
+                    </field>
+                    <button type="object" name="action_mollie_sync_methods" class="btn btn-link">
+                        <span><i class="fa fa-refresh"></i> Sync payment methods </span>
+                    </button>
+                </page>
+            </page>
+        </field>
+    </record>
+
+</odoo>
