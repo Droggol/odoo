@@ -18,8 +18,7 @@ _logger = logging.getLogger(__name__)
 class PaymentAcquirerMollie(models.Model):
     _inherit = 'payment.acquirer'
 
-    provider = fields.Selection(
-        selection_add=[('mollie', 'Mollie')], ondelete={'mollie': 'set default'})
+    provider = fields.Selection(selection_add=[('mollie', 'Mollie')], ondelete={'mollie': 'set default'})
     mollie_api_key_test = fields.Char(string="Mollie Test API key", required_if_provider="mollie", groups="base.group_user")
     mollie_api_key_prod = fields.Char(string="Mollie Live API key", required_if_provider="mollie", groups="base.group_user")
     mollie_profile_id = fields.Char("Mollie Profile ID", groups="base.group_user")
@@ -93,26 +92,9 @@ class PaymentAcquirerMollie(models.Model):
             }
 
             # Manage issuer for the method
-            if method_info.get('issuers'):
-                issuer_ids = []
-                for issuer_data in method_info['issuers']:
-                    MollieIssuer = self.env['mollie.payment.method.issuer']
-                    issuer = MollieIssuer.search([('issuers_code', '=', issuer_data['id'])], limit=1)
-                    if not issuer:
-                        issuer_create_vals = {
-                            'name': issuer_data['name'],
-                            'issuers_code': issuer_data['id'],
-                        }
-                        icon = self.env['payment.icon'].search([('name', '=', issuer_data['name'])], limit=1)
-                        image_url = issuer_data.get('image', {}).get('size2x')
-                        if not icon and image_url:
-                            icon = self.env['payment.icon'].create({
-                                'name': issuer_data['name'],
-                                'image': self._mollie_fetch_image_by_url(image_url)
-                            })
-                        issuer_create_vals['payment_icon_ids'] = [(6, 0, [icon.id])]
-                        issuer = MollieIssuer.create(issuer_create_vals)
-                    issuer_ids.append(issuer.id)
+            issuers_data = method_info.get('issuers')
+            if issuers_data:
+                issuer_ids = self._get_issuers_ids(issuers_data)
                 if issuer_ids:
                     create_vals['payment_issuer_ids'] = [(6, 0, issuer_ids)]
 
@@ -128,15 +110,44 @@ class PaymentAcquirerMollie(models.Model):
                 create_vals['payment_icon_ids'] = [(6, 0, [icon.id])]
             MolliePaymentMethod.create(create_vals)
 
+    def _get_issuers_ids(self, issuers_data):
+        """ Create/Update the mollie issuers based on issuers data received from
+        mollie api.
+
+        :param list issuers_data: Mollie's issuers data received from api
+        :return: list of issuers ids
+        :rtype: list
+        """
+        issuer_ids = []
+        for issuer_data in issuers_data:
+            MollieIssuer = self.env['mollie.payment.method.issuer']
+            issuer = MollieIssuer.search([('issuers_code', '=', issuer_data['id'])], limit=1)
+            if not issuer:
+                issuer_create_vals = {
+                    'name': issuer_data['name'],
+                    'issuers_code': issuer_data['id'],
+                }
+                icon = self.env['payment.icon'].search([('name', '=', issuer_data['name'])], limit=1)
+                image_url = issuer_data.get('image', {}).get('size2x')
+                if not icon and image_url:
+                    icon = self.env['payment.icon'].create({
+                        'name': issuer_data['name'],
+                        'image': self._mollie_fetch_image_by_url(image_url)
+                    })
+                issuer_create_vals['payment_icon_ids'] = [(6, 0, [icon.id])]
+                issuer = MollieIssuer.create(issuer_create_vals)
+            issuer_ids.append(issuer.id)
+        return issuer_ids
+
     def _create_method_translations(self):
         """ This method add translated terms for the method names. These translations
-            are provided by mollie locale.
+        are provided by mollie locale.
 
-            This is required as the method names are stored in fields. Luckily mollie provides
-            translated values so we create the translation terms from mollie.
+        This is required as the method names are stored in fields. Luckily mollie provides
+        translated values so we create the translation terms from mollie.
 
-            Note: We only create the terms if it is not present becasue user might have enterd
-            his own translation values,
+        Note: We only create the terms if it is not present because user might have enterd
+        his own translation values,
         """
         IrTranslation = self.env['ir.translation']
         supported_locale = self._mollie_get_supported_locale()
@@ -152,7 +163,7 @@ class PaymentAcquirerMollie(models.Model):
                 if method.id not in translated_method_ids:
                     method_to_translate.append(method.id)
 
-            # This will help avoiding unnecessary network calls
+            # We only create the terms if it is not present
             if method_to_translate:
                 methods_data = self._api_mollie_get_active_payment_methods(extra_params={'locale': lang.code})
                 for method_id in method_to_translate:
@@ -246,13 +257,13 @@ class PaymentAcquirerMollie(models.Model):
         # User agent strings used by mollie to find issues in integration
         odoo_version = service.common.exp_version()['server_version']
         mollie_version = self.env.ref('base.module_payment_mollie').installed_version
-
         headers = {
             "Accept": "application/json",
             "Authorization": f'Bearer {mollie_api_key}',
             "Content-Type": "application/json",
             "User-Agent": f'Odoo/{odoo_version} MollieOdoo/{mollie_version}',
         }
+
         if data:
             data = json.dumps(data)
         try:
@@ -297,12 +308,26 @@ class PaymentAcquirerMollie(models.Model):
         return result or {}
 
     def _api_mollie_create_payment_record(self, api_type, payment_data):
+        """ Create the payment records on the mollie. It calls payment or order
+        API based on 'api_type' param.
+
+        :param str api_type: api is selected based on this parameter
+        :param dict payment_data: payment data
+        :return: details of created payment record
+        :rtype: dict
+        """
         endpoint = '/orders' if api_type == 'order' else '/payments'
         return self._mollie_make_request(endpoint, data=payment_data, method="POST")
 
     def _api_mollie_get_payment_data(self, transection_reference):
-        """ Sending force_payment=True will send payment data even if transection_reference is for order api """
-        mollie_data = False
+        """ Fetch the payment records based `transection_reference`. It is used
+        to varify transection's state after the payment.
+
+        :param str transection_reference: transection reference
+        :return: details of payment record
+        :rtype: dict
+        """
+        mollie_data = {}
         if transection_reference.startswith('ord_'):
             mollie_data = self._mollie_make_request(f'/orders/{transection_reference}', params={'embed': 'payments'}, method="GET")
         if transection_reference.startswith('tr_'):    # This is not used
@@ -337,11 +362,11 @@ class PaymentAcquirerMollie(models.Model):
 
     def _mollie_generate_querystring(self, params):
         """ Mollie uses dictionaries in querystrings with square brackets like this
-            https://api.mollie.com/v2/methods?amount[value]=125.91&amount[currency]=EUR
+        https://api.mollie.com/v2/methods?amount[value]=125.91&amount[currency]=EUR
 
-            :param dict params: parameters which needs to be converted in mollie format
-            :return: querystring in mollie's format
-            :rtype: string
+        :param dict params: parameters which needs to be converted in mollie format
+        :return: querystring in mollie's format
+        :rtype: string
         """
         if not params:
             return None
