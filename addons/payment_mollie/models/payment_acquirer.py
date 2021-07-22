@@ -293,7 +293,7 @@ class PaymentAcquirerMollie(models.Model):
                     result[method['id']] = method
         return result
 
-    def _api_mollie_create_peyment_record(self, api_type, payment_data):
+    def _api_mollie_create_payment_record(self, api_type, payment_data):
         endpoint = '/orders' if api_type == 'order' else '/payments'
         return self._mollie_make_request(endpoint, data=payment_data, method="POST")
 

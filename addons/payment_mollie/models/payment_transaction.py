@@ -112,7 +112,7 @@ class PaymentTransaction(models.Model):
         if (result and result.get('error') or result is None) and method_record.supports_payment_api:
             if result and result.get('error'):
                 _logger.warning("Can not use order api due to '%s' fallback on payment" % (result.get('error')))
-            result = self._mollie_create_payment('payment')
+            result = self._mollie_create_record('payment')
 
         return result
 
@@ -160,7 +160,7 @@ class PaymentTransaction(models.Model):
         if self.mollie_payment_issuer:
             payment_data['payment'] = {'issuer': self.mollie_payment_issuer}
 
-        result = self.acquirer_id._mollie_make_request('/orders', data=payment_data, method="POST")
+        result = self.acquirer_id._api_mollie_create_payment_record(api_type, payment_data)
 
         # We are setting acquirer reference as we are receiving it before 3DS payment
         # So we can identify transaction with mollie respose
