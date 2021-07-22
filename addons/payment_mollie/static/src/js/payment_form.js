@@ -1,9 +1,11 @@
 odoo.define('mollie.payment.form', function (require) {
     "use strict";
 
-    const checkoutForm = require('payment.checkout_form');
     const ajax = require('web.ajax');
+    const checkoutForm = require('payment.checkout_form');
+    const core = require('web.core');
 
+    const _t = core._t;
 
     checkoutForm.include({
         events: _.extend({
@@ -38,7 +40,6 @@ odoo.define('mollie.payment.form', function (require) {
             }
             this._setPaymentFlow('direct');
             var $creditCardContainer = this.$(`#o_payment_mollie_method_inline_form_${paymentOptionId} #o_mollie_component`);
-            debugger;
             if (!$creditCardContainer.length || this.mollieComponentLoaded) {
                 return this._super(...arguments);
             }

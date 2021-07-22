@@ -215,8 +215,8 @@ class PaymentAcquirerMollie(models.Model):
                 methods = methods.filtered(lambda m: not m.country_ids or country_code in m.country_ids.mapped('code'))
 
         # Hide methods if mollie does not supports them (checks via api call)
-        suppported_methods = self.sudo()._api_mollie_get_active_payment_methods(extra_params=extra_params)   # sudo as public user do not have access to keys
-        methods = methods.filtered(lambda m: m.method_code in suppported_methods.keys())
+        supported_methods = self.sudo()._api_mollie_get_active_payment_methods(extra_params=extra_params, silent_errors=True) or {}  # sudo as public user do not have access to keys
+        methods = methods.filtered(lambda m: m.method_code in supported_methods.keys())
 
         return methods
 
@@ -224,14 +224,14 @@ class PaymentAcquirerMollie(models.Model):
     # API methods
     # -----------
 
-    def _mollie_make_request(self, endpoint, params=None, data=None, method='POST'):
+    def _mollie_make_request(self, endpoint, params=None, data=None, method='POST', silent_errors=False):
         """ Make a request at mollie endpoint
 
         Note: self.ensure_one()
 
         :param str endpoint: The endpoint to be reached by the request
         :param dict params: The querystring of the request
-        :param dict data: The pyload of the request
+        :param dict data: The payload of the request
         :param str method: The HTTP method of the request
         :return The JSON-formatted content of the response
         :rtype: dict
@@ -256,11 +256,14 @@ class PaymentAcquirerMollie(models.Model):
         if data:
             data = json.dumps(data)
         try:
-            response = requests.request(method, url, params=params, data=data, headers=headers, timeout=(10, 20))
+            response = requests.request(method, url, params=params, data=data, headers=headers, timeout=60)
             response.raise_for_status()
-        except requests.exceptions.ConnectionError:
+        except requests.exceptions.RequestException:
             _logger.exception("Unable to communicate with Mollie: %s", url)
-            raise ValidationError("Mollie: " + _("Could not establish the connection to the API."))
+            if silent_errors:
+                return False
+            else:
+                raise ValidationError("Mollie: " + _("Could not establish the connection to the API."))
         return response.json()
 
     def _api_mollie_get_active_payment_methods(self, extra_params={}):
