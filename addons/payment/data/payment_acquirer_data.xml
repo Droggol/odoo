@@ -364,4 +364,19 @@
         </field>
     </record>
 
+    <record id="payment_acquirer_mollie" model="payment.acquirer">
+        <field name="name">Mollie</field>
+        <field name="image_128" type="base64" file="payment_mollie/static/src/img/mollie_icon.png"/>
+        <field name="module_id" ref="base.module_payment_mollie"/>
+        <field name="description" type="html">
+            <p>
+                A payment gateway from Mollie to accept online payments.
+            </p>
+            <ul class="list-inline">
+                <li class="list-inline-item"><i class="fa fa-check"/>Online Payment</li>
+                <li class="list-inline-item"><i class="fa fa-check"/>Payment Status Tracking</li>
+            </ul>
+        </field>
+    </record>
+
 </odoo>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <record id="payment.payment_acquirer_mollie" model="payment.acquirer">
+        <field name="provider">mollie</field>
+        <field name="support_authorization">False</field>
+        <field name="support_fees_computation">False</field>
+        <field name="support_tokenization">False</field>
+        <field name="redirect_form_view_id" ref="redirect_form"/>
+
+        <!-- https://www.mollie.com/en/payments -->
+        <field name="payment_icon_ids" eval="[(6, 0, [
+                ref('payment.payment_icon_cc_visa'),
+                ref('payment.payment_icon_cc_american_express'),
+                ref('payment.payment_icon_cc_maestro'),
+                ref('payment.payment_icon_cc_mastercard'),
+                ref('payment.payment_icon_cc_bancontact'),
+                ref('payment.payment_icon_cc_eps'),
+                ref('payment.payment_icon_cc_giropay'),
+                ref('payment.payment_icon_cc_p24'),
+                ref('payment.payment_icon_cc_ideal'),
+                ref('payment.payment_icon_paypal'),
+                ref('payment.payment_icon_apple_pay'),
+                ref('payment.payment_icon_sepa'),
+                ref('payment.payment_icon_kbc')
+            ])]"/>
+
+    </record>
+
+    <record id="payment_method_mollie" model="account.payment.method">
+        <field name="name">Mollie</field>
+        <field name="code">mollie</field>
+        <field name="payment_type">inbound</field>
+    </record>
+
+</odoo>
