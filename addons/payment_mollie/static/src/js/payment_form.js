@@ -217,8 +217,8 @@ odoo.define('mollie.payment.form', function (require) {
          */
         _onClickIssuer: function (ev) {
             let $container = $(ev.currentTarget).closest('.o_mollie_issuer_container');
-            $container.find('.o_mollie_issuer').removeClass('active');
-            $(ev.currentTarget).addClass('active');
+            $container.find('.o_mollie_issuer').removeClass('active border-primary');
+            $(ev.currentTarget).addClass('active border-primary');
         },
     });
 

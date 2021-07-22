@@ -57,22 +57,22 @@
             <div class="form-row o_mollie_form mb-1">
                 <div class="col-md-12">
                     <label class="label text-muted mb-1" for="mollie-card-holder">Card Holder</label>
-                    <div id="mollie-card-holder" class="mollie_input p-2"></div>
+                    <div id="mollie-card-holder" class="mollie_input border bg-white p-2"></div>
                     <div id="mollie-card-holder-error" class="text-danger small"></div>
                 </div>
                 <div class="col-md-12">
                     <label class="label text-muted mb-1 mt-3" for="mollie-card-number">Card Number</label>
-                    <div id="mollie-card-number" class="mollie_input p-2"></div>
+                    <div id="mollie-card-number" class="mollie_input border bg-white p-2"></div>
                     <div id="mollie-card-number-error" class="text-danger small"></div>
                 </div>
                 <div class="col-md-6">
                     <label class="label text-muted mb-1 mt-3" for="mollie-expiry-date">Expiry Date</label>
-                    <div id="mollie-expiry-date" class="mollie_input p-2"></div>
+                    <div id="mollie-expiry-date" class="mollie_input border bg-white p-2"></div>
                     <div id="mollie-expiry-date-error" class="text-danger small"></div>
                 </div>
                 <div class="col-md-6">
                     <label class="label text-muted mb-1 mt-3" for="mollie-verification-code">Verification code</label>
-                    <div id="mollie-verification-code" class="mollie_input p-2"></div>
+                    <div id="mollie-verification-code" class="mollie_input border bg-white p-2"></div>
                     <div id="mollie-verification-code-error" class="text-danger small"></div>
                 </div>
             </div>
@@ -84,7 +84,7 @@
     <div class="row o_mollie_issuer_container">
         <t t-foreach="payment_method.payment_issuer_ids" t-as="issuer">
             <div class="col-md-6 col-xs-12">
-                <label t-attf-class="bg-white w-100 p-2 border position-relative o_mollie_issuer #{issuer_index == 0 and 'active' or '' }" t-att-data-mollie-issuer="issuer.issuers_code">
+                <label t-attf-class="bg-white rounded w-100 p-2 border position-relative o_mollie_issuer #{issuer_index == 0 and 'active border-primary' or '' }" t-att-data-mollie-issuer="issuer.issuers_code">
                     <span class="payment_option_name">
                         <i class="fa fa-check-circle"></i>
                         <t t-esc="issuer.name"/>
