@@ -35,10 +35,11 @@ class PaymentTransaction(models.Model):
         res = super()._get_specific_processing_values(processing_values)
         if self.provider != 'mollie':
             return res
+        payment_data = self._create_mollie_record_from_transaction()
 
-        payment_data = self._create_mollie_record_from_transection()
-
-        if payment_data["_links"].get("checkout"):
+        # if checkout links are not present means payment has been done via card token
+        # and there is no need to checkout on mollie
+        if payment_data.get("_links", {}).get("checkout"):
             redirect_url = payment_data["_links"]["checkout"]["href"]
         else:
             redirect_url = payment_data.get('redirectUrl')
@@ -95,12 +96,10 @@ class PaymentTransaction(models.Model):
         elif payment_status in ['expired', 'canceled', 'failed']:
             self._set_canceled("Mollie: " + _("Mollie: canceled due to status: %s", payment_status))
         else:
-            _logger.info("received data with invalid payment status: %s", payment_status)
-            self._set_error(
-                "Mollie: " + _("Received data with invalid payment status: %s", payment_status)
-            )
+            _logger.info("Received data with invalid payment status: %s", payment_status)
+            self._set_error("Mollie: " + _("Received data with invalid payment status: %s", payment_status))
 
-    def _create_mollie_record_from_transection(self):
+    def _create_mollie_record_from_transaction(self):
         """ In order to capture payment from mollie we need to create a record on mollie.
 
         Mollie have 2 type of api to create payment record,
@@ -174,11 +173,11 @@ class PaymentTransaction(models.Model):
         if "://localhost" not in webhook_url and "://192.168." not in webhook_url and "://127." not in webhook_url:
             payment_data['webhookUrl'] = f'{webhook_url}?ref={self.reference}'
 
-        # Add if transection has cardToken
+        # Add if transaction has cardToken
         if self.mollie_card_token:
             payment_data['payment'] = {'cardToken': self.mollie_card_token}
 
-        # Add if transection has issuer
+        # Add if transaction has issuer
         if self.mollie_payment_issuer:
             payment_data['payment'] = {'issuer': self.mollie_payment_issuer}
 
@@ -198,10 +197,10 @@ class PaymentTransaction(models.Model):
         :rtype: dict
         """
         lines = []
-        for line in order.order_line:
+        for line in order.order_line.filtered(lambda l: not l.display_type):  # ignore notes and section lines
             line_data = {
                 'name': line.name,
-                "type": "physical",
+                'type': 'physical',
                 'quantity': int(line.product_uom_qty),    # Mollie does not support float.
                 'unitPrice': {
                     'currency': line.currency_id.name,

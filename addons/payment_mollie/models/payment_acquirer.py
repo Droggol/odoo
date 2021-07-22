@@ -35,7 +35,7 @@ class PaymentAcquirerMollie(models.Model):
         return self.env.ref('payment_mollie.payment_method_mollie').id
 
     def _get_custom_create_values(self, values):
-        """ Override to return mollie-specific values for creation of transection.
+        """ Override to return mollie-specific values for creation of transaction.
 
         :param dict values: Extra values submitted from the web page
         :return: The dict of acquirer-specific create values
@@ -188,7 +188,7 @@ class PaymentAcquirerMollie(models.Model):
 
             Note: we also filter the methods based on geoip and voucher configurations.
 
-            :param dict order: order record for which this transection is generated
+            :param dict order: order record for which this transaction is generated
             :return details of supported methods
             :rtype: dict
         """
@@ -319,19 +319,19 @@ class PaymentAcquirerMollie(models.Model):
         endpoint = '/orders' if api_type == 'order' else '/payments'
         return self._mollie_make_request(endpoint, data=payment_data, method="POST")
 
-    def _api_mollie_get_payment_data(self, transection_reference):
-        """ Fetch the payment records based `transection_reference`. It is used
-        to varify transection's state after the payment.
+    def _api_mollie_get_payment_data(self, transaction_reference):
+        """ Fetch the payment records based `transaction_reference`. It is used
+        to varify transaction's state after the payment.
 
-        :param str transection_reference: transection reference
+        :param str transaction_reference: transaction reference
         :return: details of payment record
         :rtype: dict
         """
         mollie_data = {}
-        if transection_reference.startswith('ord_'):
-            mollie_data = self._mollie_make_request(f'/orders/{transection_reference}', params={'embed': 'payments'}, method="GET")
-        if transection_reference.startswith('tr_'):    # This is not used
-            mollie_data = self._mollie_make_request(f'/payments/{transection_reference}', method="GET")
+        if transaction_reference.startswith('ord_'):
+            mollie_data = self._mollie_make_request(f'/orders/{transaction_reference}', params={'embed': 'payments'}, method="GET")
+        if transaction_reference.startswith('tr_'):    # This is not used
+            mollie_data = self._mollie_make_request(f'/payments/{transaction_reference}', method="GET")
         return mollie_data
 
     # -------------------------
