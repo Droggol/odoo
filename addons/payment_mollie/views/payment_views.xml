@@ -30,7 +30,7 @@
                             <field name="payment_icon_ids" widget="many2many_tags"/>
                             <field name="active" invisible="1"/>
                             <field name="active_on_shop" widget="boolean_toggle"/>
-                            <field name="country_ids" widget="many2many_tags" optional="hide"/>
+                            <field name="country_ids" widget="many2many_tags"/>
                             <field name="supports_order_api" invisible="1"/>
                             <field name="supports_payment_api" invisible="1"/>
                             <field name="payment_issuer_ids" widget="many2many_tags" invisible="1"/>
@@ -60,8 +60,9 @@
                                 <page string="Voucher Configuration" name="voucher_config" attrs="{'invisible': [('method_code', '!=', 'voucher')]}">
                                     <field name="mollie_voucher_ids">
                                         <tree editable="bottom">
-                                            <field name="category_id"/>
                                             <field name="mollie_voucher_category"/>
+                                            <field name="category_ids" widget="many2many_tags"/>
+                                            <field name="product_ids" widget="many2many_tags"/>
                                         </tree>
                                     </field>
                                 </page>

@@ -25,7 +25,7 @@ class PaymentAcquirerMollie(models.Model):
     mollie_api_key_test = fields.Char(string="Mollie Test API key", required_if_provider="mollie", groups="base.group_user")
     mollie_api_key_prod = fields.Char(string="Mollie Live API key", required_if_provider="mollie", groups="base.group_user")
     mollie_profile_id = fields.Char("Mollie Profile ID", groups="base.group_user")
-    mollie_methods_ids = fields.One2many('mollie.payment.method', 'parent_id', string='Mollie Payment Methods')
+    mollie_methods_ids = fields.One2many('mollie.payment.method', 'acquirer_id', string='Mollie Payment Methods')
 
     # ------------------
     # OVERRIDDEN METHODS
@@ -86,7 +86,7 @@ class PaymentAcquirerMollie(models.Model):
             create_vals = {
                 'name': method_info['description'],
                 'method_code': method_info['id'],
-                'parent_id': self.id,
+                'acquirer_id': self.id,
                 'supports_order_api': method_info.get('support_order_api', False),
                 'supports_payment_api': method_info.get('support_payment_api', False)
             }
@@ -174,10 +174,10 @@ class PaymentAcquirerMollie(models.Model):
         if not self.sudo().mollie_profile_id:
             methods = methods.filtered(lambda m: m.method_code != 'creditcard')
 
-        remove_voucher_method, extra_params = True, {}
+        has_voucher_line, extra_params = False, {}
         if order:
             extra_params['amount'] = {'value': "%.2f" % order.amount_total, 'currency': order.currency_id.name}
-            remove_voucher_method = not any(map(lambda p: p._get_mollie_voucher_category(), order.mapped('order_line.product_id.product_tmpl_id')))
+            has_voucher_line = order.mapped('order_line.product_id.product_tmpl_id')._get_mollie_voucher_category()
             if order.partner_invoice_id.country_id:
                 extra_params['billingCountry'] = order.partner_invoice_id.country_id.code
         else:
@@ -192,7 +192,7 @@ class PaymentAcquirerMollie(models.Model):
         if amount and currency:
             extra_params['amount'] = {'value': "%.2f" % amount, 'currency': currency.name}
 
-        if remove_voucher_method:
+        if not has_voucher_line:
             methods = methods.filtered(lambda m: m.method_code != 'voucher')
 
         # Hide based on country
