@@ -1,18 +1,16 @@
 # -*- coding: utf-8 -*-
+# Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import json
 import base64
 import logging
 import requests
 from werkzeug import urls
-from mollie.api.client import Client as MollieClient
-from mollie.api.error import UnprocessableEntityError
 
-from odoo import _, api, fields, models, service
+from odoo import _, fields, models, service
 from odoo.exceptions import ValidationError
 from odoo.http import request
 
-from odoo.addons.payment_mollie.controllers.main import MollieController
 
 _logger = logging.getLogger(__name__)
 

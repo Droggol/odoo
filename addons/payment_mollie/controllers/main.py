@@ -13,7 +13,6 @@ class MollieController(http.Controller):
     _return_url = "/payment/mollie/return"
     _notify_url = "/payment/mollie/notify"
 
-
     @http.route(_return_url, type='http', auth='public', methods=['GET', 'POST'], csrf=False, sitemap=False)
     def mollie_return(self, **data):
         if data:
